@@ -207,6 +207,22 @@ def ppeek?(c: Char) : P Bool := do
   let cm <- ppeek
   return (cm == some c)
 
+partial def peekwhile (predicate: Char -> Bool)
+   (s: String)
+   (out: String): String :=
+      if isEmpty s 
+      then ""
+      else 
+        let c := front s;
+        if predicate c
+        then peekwhile predicate (s.drop 1) (out.push c)
+        else out
+
+-- | never fails, returns empty string till it can read something that
+-- | matches predicate
+partial def ppeekwhile (predicate: Char -> Bool): P String := {
+  runP := λ loc ns s => (loc, ns, s, Result.ok (peekwhile predicate s ""))
+}
 
 def eat_whitespace : P Unit := {
   runP := λ loc ns s =>
@@ -214,6 +230,15 @@ def eat_whitespace : P Unit := {
     (l', ns, s', Result.ok ())
   }
 
+partial def ppeek_ident: P (Option String) := do
+  eat_whitespace
+  let mc <- ppeek
+  match mc with
+  | Option.none => return Option.none
+  | Option.some c => 
+    match c.isAlpha with -- is alphabet, so it starts an identifier
+      | false => return Option.none 
+      | true => ppeekwhile (fun c => c.isAlphanum || c == '_')
 
 partial def takeWhile (predicate: Char -> Bool)
    (startloc: Loc)
