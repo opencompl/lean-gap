@@ -1,9 +1,8 @@
-  import GAP.P
-  import GAP.Doc
+import GAP.P
+import GAP.Doc
 
-  open GAP.P
-
-  namespace GAP.AST
+open GAP.P
+namespace GAP.AST
 
   inductive binop_type
   | add: binop_type
@@ -47,9 +46,25 @@
 mutual
   partial def parse_expr_logical (u: Unit): P Expr := do 
     let l <- parse_expr u
-    let mkwd <- ppeek_ident
-    match mkwd with
+    let kwd <- ppeek_ident
+    match kwd with
     | _ => return l
 
-  partial def parse_expr (u: Unit): P Expr := parse_expr_logical u
+  partial def parse_list_commas (u: Unit) : P Expr := do
+    let args <- pintercalated '[' (parse_expr u) ',' ']'
+    return  (Expr.expr_list args)
+
+  partial  def parse_list_range2 (u: Unit) : P Expr := do
+    pconsume '['
+    let first <- parse_expr u
+    pconsume_symbol ".."
+    let last <- parse_expr u
+    return Expr.expr_range2 first last
+  
+  partial def parse_list (u: Unit) : P Expr := do 
+    por (parse_list_commas u) $ (parse_list_range2 u)
+
+
+  partial def parse_expr (u: Unit): P Expr := 
+    por (parse_expr_logical u) $ (parse_list u)
   end
