@@ -1,7 +1,9 @@
 -- main entrypoint
 import GAP.P
 import GAP.Doc
+import GAP.AST
 
+open GAP.AST
 open GAP.Doc
 open GAP.P
 open IO
@@ -22,7 +24,7 @@ def main (xs: List String): IO Unit := do
   -- IO.eprintln MLIR.EDSL.opRgnAttr0
   IO.eprintln "PARSING\n=======\n"
   let ns := []
-  let (loc, ns, _, res) <-  (psuccess ()).runP locbegin ns contents
+  let (loc, ns, _, res) <-  (parse_toplevel ()).runP locbegin ns contents
   IO.eprintln (vgroup $ ns.map (note_add_file_content contents))
   match res with
    | Result.ok op => do
