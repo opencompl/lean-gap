@@ -121,23 +121,19 @@ mutual
            pconsume_keyword "not"
            let e <- parse_expr u
            return Expr.expr_not e
-    | some x => perror $ "unknown keyword: |" ++ x ++ "|"
+    | some x => perror $ doc "unknown keyword: |" ++ doc x ++ doc "|"
     | none => 
        match (<- ppeek_ident) with
        | some ident => return Expr.expr_var ident
        | none => 
-          if (<- ppeek_symbol? "[")
-          then parse_list u
-          else if (<- ppeek_keyword? "function") 
-          then parse_fn_defn u
-          else if (<- ppeek_symbol? "(")
-          then parse_permutation u
-          else if (<- ppeek_symbol? "-")
-          then do
+          if (<- ppeek_symbol? "[") then parse_list u
+          else if (<- ppeek_keyword? "function") then parse_fn_defn u
+          else if (<- ppeek_symbol? "(") then parse_permutation u
+          else if (<- ppeek_symbol? "-") then do
              pconsume_symbol "-"
              let e <- parse_expr u
              return new Expr.expr_neg u
-          else => do
+          else do
             perror "unknown leaf expression"
            
     

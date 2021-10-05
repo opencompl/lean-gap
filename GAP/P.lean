@@ -40,7 +40,7 @@ instance : Inhabited Loc where
    default := { line := 1, column := 1, ix := 0 }
 
 instance : Pretty Loc where
-   doc (loc: Loc) := toString loc.line ++ ":" ++ toString loc.column
+   doc (loc: Loc) := doc toString loc.line ++ doc ":" ++ doc toString loc.column
 
 
 def locbegin : Loc := { line := 1, column := 1, ix := 0 }
