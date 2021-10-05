@@ -172,7 +172,8 @@ partial def eat_whitespace_ (l: Loc) (s: String) : Loc × String :=
     then (l, s)
     else  
      let c:= front s
-     if isPrefixOf "//" s
+     -- if isPrefixOf "//" s
+     if c == '#'
      then 
       let (l, s) := eat_line_ l s
       eat_whitespace_ l s
