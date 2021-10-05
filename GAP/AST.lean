@@ -222,7 +222,65 @@ partial def parse_fn_defn (u: Unit) : P Stmt := do
   let stmts <- pmany0 (parse_stmt u)
   return Stmt.stmt_fn_defn params varargs? locals stmts
 
-partial def parse_stmt (u: Unit) : P Stmt := perror "foo"
+
+
+-- | stop? should only peek, not consume!
+partial def parse_stmts (pstop?: P Bool) (u: Unit) : P (List Stmt) := do
+   let stop? <- pstop?
+   match stop? with
+   | true => return []
+   | false => do
+        let s <- parse_stmt u
+        let ss <- parse_stmts pstop? u
+        return (s::ss)
+
+partial def whileM [Monad m] (cond: m Bool) (body: m a): m (List a) := do 
+   if (<- cond)
+   then do let a <- body; let as <- whileM cond body; return (a::as)
+   else return []
+
+
+
+partial def parse_if (u: Unit) : P Stmt := do
+ let p_is_fi_or_elif_or_else : P Bool :=
+     por (ppeek_keyword? "fi") (por (ppeek_keyword? "elif") (ppeek_keyword? "else"))
+
+  let rec pelse (u: Unit)  : P ((List (Expr × List Stmt)) × Option (List Stmt)) := do
+   match (<- ppeek_keyword) with
+      | "elif" => do
+             let cond <- parse_expr u
+             pconsume_keyword "then"
+             let body <- parse_stmts p_is_fi_or_elif_or_else u
+             let (elifs, else_) <- pelse u
+             return ((cond,body)::elifs, else_)
+      | "else" => do
+          pconsume_keyword "else"
+          let stmts <- parse_stmts (ppeek_keyword? "fi") u
+          pconsume_keyword "fi"
+          return ([], Option.some stmts)
+      | "fi" => return ([], Option.none)
+      | _ => do
+            perror "expected elif/else/fi at end of if"
+
+  pconsume_keyword "if"
+  let cond <- parse_expr u
+  pconsume_keyword "then"
+  let body <- parse_stmts p_is_fi_or_elif_or_else u
+  let (elifs, else_) <- pelse u
+  return Stmt.stmt_if cond body elifs else_
+
+
+
+  partial def parse_stmt (u: Unit) : P Stmt := perror "foo"
+
+
+  -- | note to self: these give *worse* error messages!
   partial def parse_expr (u: Unit): P Expr := 
     por (parse_expr_logical u) $ (parse_list u)
+
   end
+
+partial def parse_toplevel (u: Unit): P (List Stmt) :=
+  pmany0 (parse_stmt u)
+
+

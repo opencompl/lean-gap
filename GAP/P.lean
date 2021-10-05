@@ -365,7 +365,7 @@ partial def  pmany0  (p: P a) : P (List a) := do
        return []
 
 -- | parse <p>+ for a given <p>
-partial def  pmany1 [Pretty a] (p: P a) : P (List a) := do
+partial def  pmany1 (p: P a) : P (List a) := do
   let a1 <- p
   let as <- pmany0 p
   return (a1::as)
