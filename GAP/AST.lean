@@ -37,7 +37,7 @@ namespace GAP.AST
     
   inductive Stmt 
   | stmt_assign: (lhs: Expr) -> (rhs: Expr) -> Stmt
-  | stmt_procedure_call: (name: String) -> (args: List Expr) -> Stmt
+  | stmt_procedure_call: (fn: Expr) -> (args: List Expr) -> Stmt
   | stmt_fn_defn: (params: List String) -> (is_vararg?: Bool) -> (locals: List String) ->
         (body: List Stmt) -> Stmt
   | stmt_if: (cond: Expr)
@@ -274,8 +274,33 @@ partial def parse_if (u: Unit) : P Stmt := do
   return Stmt.stmt_if cond body elifs else_
 
 
+partial def parse_assgn_or_procedure_call (u: Unit) : P Stmt := do
+   let lhs <- parse_expr u
+   if (<- ppeek_symbol? "(") then do
+     let args <- pintercalated '(' (parse_expr u) ',' ')'
+     return Stmt.stmt_procedure_call lhs args
+   else if (<- ppeek_symbol? ":=") then do
+     pconsume_symbol ":="
+     let rhs <- parse_expr u
+     return Stmt.stmt_assign lhs rhs
+   else perror "expected assignment with := or function call with (...) at toplevel"
 
-  partial def parse_stmt (u: Unit) : P Stmt := perror "foo"
+  
+
+partial def parse_for(u: Unit): P Stmt := do
+  pconsume_keyword "for"
+  let var <- pident
+  pconsume_keyword "in"
+  let e <- parse_expr u
+  pconsume_keyword "do"
+  let body <- parse_stmts (ppeek_keyword? "od") u
+  return Stmt.stmt_for var e body
+
+  partial def parse_stmt (u: Unit) : P Stmt := do
+  match (<- ppeek_keyword) with
+  | some "if" => parse_if u
+  | some "for" => parse_for u
+  | _ => parse_assgn_or_procedure_call u
 
 
   -- | note to self: these give *worse* error messages!
