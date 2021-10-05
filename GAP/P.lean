@@ -192,6 +192,18 @@ def ppeek : P (Option Char) := {
      (loc, ns, haystack, Result.ok ∘ some ∘ front $ haystack)
   }
 
+partial def ppeek_symbol? (sym: String): P Bool :=  {
+  runP := λ loc notes s => 
+     let (loc, s) := eat_whitespace_ loc s
+     return (loc, notes, s, Result.ok (isPrefixOf sym s))
+}
+
+partial def pconsume_symbol (s: String): P Unit := do
+  match (<- ppeek_symbol? s) with
+  | true => psuccess ()
+  | false => perror $ "expected symbol |" ++ s ++ "|"
+
+
 def padvance_char_INTERNAL (c: Char) : P Unit := {
   runP := λ loc ns haystack => (advance1 loc c, ns, drop haystack 1, Result.ok ())
 }

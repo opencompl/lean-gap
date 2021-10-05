@@ -68,8 +68,6 @@ mutual
   -- | cannot have a ppeek_symbol because one symbol can be a proper
   -- | prefix of another, so we are not sure how to tokenize!
   -- partial def ppeek_symbol: P (Option String) := perror "foo"
-  partial def ppeek_symbol? (s: String): P Bool := perror "peek_symbol?"
-  partial def pconsume_symbol (s: String): P Unit := perror "pconsume_symbol"
   
   partial def ppeek_keyword : P (Option String) := do 
    match (<- pmay pident) with 
