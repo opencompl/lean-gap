@@ -58,22 +58,33 @@ instance : Coe (List Stmt) Block where
  -- | a block is a sequence of statements.
  -- abbrev Block := List Stmt
 
+
+def keywords : List String := ["if", "else", "do", "od"]
+
 mutual
 
-  partial def pconsume_symbol (s: String): P Unit := perror "foo"
-  partial def ppeek_keyword: P (Option String) := perror "foo"
-  partial def pconsume_keyword (s: String) : P Unit := perror "foo"
+
 
   -- | cannot have a ppeek_symbol because one symbol can be a proper
   -- | prefix of another, so we are not sure how to tokenize!
   -- partial def ppeek_symbol: P (Option String) := perror "foo"
-  partial def ppeek_symbol? (s: String): P Bool := perror "foo"
-  partial def pconsume_symbol (s: String): P Unit := perror "foo"
+  partial def ppeek_symbol? (s: String): P Bool := perror "peek_symbol?"
+  partial def pconsume_symbol (s: String): P Unit := perror "pconsume_symbol"
+  
+  partial def ppeek_keyword : P (Option String) := do 
+   match (<- pmay pident) with 
+   | some s => if keywords.contains s then some s else none
+   | none => perror "expected keyword"
 
   partial def ppeek_keyword? (s: String): P Bool := do
    match (<- ppeek_keyword) with
     | none => return false
     | some k' => return s == k'
+
+  partial def pconsume_keyword (s: String) : P Unit := do
+     match (<- ppeek_keyword? s) with
+     | true => psuccess ()
+     | false => perror $ "expected keyword: |" ++ s ++ "|"
 
   partial def parse_expr_logical (u: Unit): P Expr := do 
     let l <- parse_expr_compare u
