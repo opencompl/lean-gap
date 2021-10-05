@@ -75,9 +75,15 @@ mutual
     | some k' => return s == k'
 
   partial def parse_expr_logical (u: Unit): P Expr := do 
-    let l <- parse_expr u
+    let l <- parse_expr_compare u
     let kwd <- ppeek_ident
     match kwd with
+    | some "and" => do
+        let r <- parse_expr u
+        return Expr.expr_binop l binop_type.and r
+    | some "or" => do
+        let r <- parse_expr u
+        return Expr.expr_binop l binop_type.or r
     | _ => return l
 
   partial def parse_list_commas (u: Unit) : P Expr := do
@@ -103,8 +109,38 @@ mutual
   partial def parse_list (u: Unit) : P Expr := do 
     por (parse_list_commas u) $ (parse_list_range2 u)
 
-  partial def parse_expr_leaf (u: Unit) : P Expr := perror "leaf"
-
+  partial def parse_expr_leaf (u: Unit) : P Expr := do
+    match (<- ppeek_keyword) with
+    | some "true" => do 
+           pconsume_keyword "true"
+           return (Expr.expr_bool true)
+    | some "false" => do
+           pconsume_keyword "false"
+           return (Expr.expr_bool false)
+    | some "not" => do
+           pconsume_keyword "not"
+           let e <- parse_expr u
+           return Expr.expr_not e
+    | some x => perror $ "unknown keyword: |" ++ x ++ "|"
+    | none => 
+       match (<- ppeek_ident) with
+       | some ident => return Expr.expr_var ident
+       | none => 
+          if (<- ppeek_symbol? "[")
+          then parse_list u
+          else if (<- ppeek_keyword? "function") 
+          then parse_fn_defn u
+          else if (<- ppeek_symbol? "(")
+          then parse_permutation u
+          else if (<- ppeek_symbol? "-")
+          then do
+             pconsume_symbol "-"
+             let e <- parse_expr u
+             return new Expr.expr_neg u
+          else => do
+            perror "unknown leaf expression"
+           
+    
   partial def parse_expr_index (u: Unit) : P Expr := do
      let arr <- parse_expr_leaf u
      if (<- ppeek? '[')
@@ -169,7 +205,7 @@ partial def parse_arith_add_sub_mod (u: Unit) : P Expr := do
 
 -- TODO: write a higher order function that generates this.
 partial def parse_expr_compare (u: Unit) : P Expr := do
-  let l <- parse_arith_exponential u
+  let l <- parse_arith_add_sub_mod u
   if (<- ppeek_symbol? "=") then do
          pconsume_symbol "="
          let r <- parse_expr u
@@ -311,12 +347,11 @@ partial def parse_for(u: Unit): P Stmt := do
 
 
   -- | note to self: these give *worse* error messages!
-  partial def parse_expr (u: Unit): P Expr := 
-    por (parse_expr_logical u) $ (parse_list u)
+  partial def parse_expr (u: Unit): P Expr := parse_expr_logical u
 
   end
 
 partial def parse_toplevel (u: Unit): P (List Stmt) :=
-  pmany0 (parse_stmt u)
+  pmany1 (parse_stmt u)
 
 
