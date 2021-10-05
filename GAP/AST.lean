@@ -34,6 +34,7 @@ namespace GAP.AST
   | expr_permutation: List (List Int) -> Expr
 
 
+  
   inductive Stmt 
   | stmt_assign: (lhs: Expr) -> (rhs: Expr) -> Stmt
   | stmt_procedure_call: (name: String) -> (args: List Expr) -> Stmt
@@ -177,26 +178,31 @@ partial def parse_expr_compare (u: Unit) : P Expr := do
     | _ => return l
  
 
-partial def parse_fn_args (u: Unit) : P (List Expr, Bool) := do
+partial def parse_var : P String := do
+  let x <- pident
+  return  x
+
+--  | returns true/false based on whether varargs or not
+partial def parse_fn_args (u: Unit) : P (List String × Bool) := do
   pconsume_symbol "("
   if (<- ppeek_symbol? ")")
-  then return []
+  then (return [], false)
   else do
     -- <rest_args> = ", <arg>  [<rest_args> | ")"]
     -- | TODO: consider using ppeekstar!
-    let p_rest_args : P (List String, Bool) := do
-          pconsume ","
+    let rec p_rest_args (u: Unit): P (List String × Bool) := do
+          pconsume ','
           if (<- ppeek_symbol? "...") 
           then do
               pconsume_symbol "..."
               pconsume_symbol ")"
               return ([], true)
           else do
-            let x <- pident
-            let (xs, varargs?) <- por p_rest_args (psuccess []
+            let x <- parse_var
+            let (xs, varargs?) <- por (p_rest_args u) (psuccess ([], false))
             return (x::xs, varargs?)
-    let x <- pident
-    let (xs, varargs?) <- p_rest_args
+    let x <- parse_var
+    let (xs, varargs?) <- (p_rest_args u)
     return (x::xs, varargs?)
    
 partial def parse_fn_locals (u: Unit) : P (List String) := do
@@ -211,7 +217,7 @@ partial def parse_fn_locals (u: Unit) : P (List String) := do
   
 partial def parse_fn_defn (u: Unit) : P Stmt := do
   pconsume_keyword "function"
-  let (params, varargs?) <- parse_fn_args 
+  let (params, varargs?) <- parse_fn_args  u
   let locals <- parse_fn_locals u
   let stmts <- pmany0 (parse_stmt u)
   return Stmt.stmt_fn_defn params varargs? locals stmts

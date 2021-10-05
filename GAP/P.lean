@@ -354,7 +354,7 @@ partial def ppeekstar (l: Char) (p: P a) : P (List a) := do
   else return []
 
 
-partial def  pmany0 [Pretty a] (p: P a) : P (List a) := do
+partial def  pmany0  (p: P a) : P (List a) := do
   match (<- pmay p) with
     | Option.some a => do
         -- pnote $ "pmany0: found " ++ doc a
