@@ -22,13 +22,14 @@ def main (xs: List String): IO Unit := do
   IO.eprintln contents
   -- IO.eprintln "\nEDSL TESTING\n============\n"
   -- IO.eprintln MLIR.EDSL.opRgnAttr0
-  IO.eprintln "PARSING\n=======\n"
+  IO.eprintln "PARSING\n=======\n" 
   let ns := []
   let (loc, ns, _, res) <-  (parse_toplevel ()).runP locbegin ns contents
   IO.eprintln (vgroup $ ns.map (note_add_file_content contents))
   match res with
    | Result.ok op => do
-     IO.println op
+     IO.eprintln "***Parse succeeded:***"
+     -- IO.println op
    | Result.err err => do
       IO.eprintln "***Parse Error:***"
       IO.eprintln (note_add_file_content contents err)

@@ -289,28 +289,29 @@ partial def whileM [Monad m] (cond: m Bool) (body: m a): m (List a) := do
 
 
 
-partial def parse_if (u: Unit) : P Stmt := do
- let p_is_fi_or_elif_or_else : P Bool :=
-     por (ppeek_keyword? "fi") (por (ppeek_keyword? "elif") (ppeek_keyword? "else"))
-
-  let rec pelse (u: Unit)  : P  ((List (Expr × List Stmt)) × Option (List Stmt)) := 
+-- | parse the else clause of an if then else
+ partial def pelse (u: Unit)  : P  ((List (Expr × List Stmt)) × Option (List Stmt)) := do
    match (<- ppeek_keyword) with
-      | some "elif" => do
-             let cond <- parse_expr u
-             pconsume_keyword "then"
-             let body <- parse_stmts p_is_fi_or_elif_or_else u
-             let (elifs, else_) <- pelse u
-             return ((cond,body)::elifs, else_)
-      | some "else" => do
-          pconsume_keyword "else"
-          let stmts <- parse_stmts (ppeek_keyword? "fi") u
-          pconsume_keyword "fi"
-          return ([], Option.some stmts)
-      | some "fi" => do
-        pconsume_keyword "fi"
-        return ([], Option.none)
+      -- | some "elif" => do
+      --        let cond <- parse_expr u
+      --        pconsume_keyword "then"
+      --        let body <- parse_stmts p_is_fi_or_elif_or_else u
+      --        let (elifs, else_) <- pelse u
+      --        return ((cond,body)::elifs, else_)
+      -- | some "else" =>  do
+      --     pconsume_keyword "else"
+      --     let stmts <- parse_stmts (ppeek_keyword? "fi") u
+      --     pconsume_keyword "fi"
+      --     return ([], Option.some stmts)
+      -- | some "fi" => 
+      --   pconsume_keyword "fi"
+      --   return ([], Option.none)
       | _ => perror "expected elif/else/fi at end of if"
 
+
+partial def parse_if (u: Unit) : P Stmt := do
+  let p_is_fi_or_elif_or_else : P Bool :=
+     por (ppeek_keyword? "fi") (por (ppeek_keyword? "elif") (ppeek_keyword? "else"))
   pconsume_keyword "if"
   let cond <- parse_expr u
   pconsume_keyword "then"
