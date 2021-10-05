@@ -26,9 +26,10 @@ def main (xs: List String): IO Unit := do
   let ns := []
   let (loc, ns, _, res) <-  (parse_toplevel ()).runP locbegin ns contents
   IO.eprintln (vgroup $ ns.map (note_add_file_content contents))
+  IO.eprintln "done parsing...." 
   match res with
    | Result.ok op => do
-     IO.eprintln "***Parse succeeded:***"
+     IO.println   "***Parse succeeded:***"
      -- IO.println op
    | Result.err err => do
       IO.eprintln "***Parse Error:***"
