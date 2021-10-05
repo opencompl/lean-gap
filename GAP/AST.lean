@@ -34,18 +34,22 @@ namespace GAP.AST
   | expr_permutation: List (List Int) -> Expr
 
 
-  
+    
   inductive Stmt 
   | stmt_assign: (lhs: Expr) -> (rhs: Expr) -> Stmt
   | stmt_procedure_call: (name: String) -> (args: List Expr) -> Stmt
   | stmt_fn_defn: (params: List String) -> (is_vararg?: Bool) -> (locals: List String) ->
         (body: List Stmt) -> Stmt
-  | stmt_if: (cond: Expr) ->
-    (then_: List Stmt) -> (elifs: List (Expr × List Stmt)) -> (else_: Option Stmt) -> Stmt
+  | stmt_if: (cond: Expr)
+     -> (then_: List Stmt)
+     -> (elifs: List (Expr × List Stmt))
+     -> (else_: Option (List Stmt)) -> Stmt
   | stmt_return: (e: Expr) -> Stmt
   | stmt_for: (iter: String) -> (rhs: Expr) -> (body: List Stmt) -> Stmt
   -- TODO: add while
-
+  
+ -- | a block is a sequence of statements.
+ abbrev Block := List Stmt
 
 mutual
 
