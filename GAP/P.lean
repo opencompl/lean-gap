@@ -7,6 +7,7 @@ open String
 open Char
 
 namespace GAP.P
+open GAP.Doc
 
 inductive Result (e : Type) (a : Type) : Type where 
 | ok: a -> Result e a
@@ -40,7 +41,7 @@ instance : Inhabited Loc where
    default := { line := 1, column := 1, ix := 0 }
 
 instance : Pretty Loc where
-   doc (loc: Loc) := doc toString loc.line ++ doc ":" ++ doc toString loc.column
+   doc (loc: Loc) := doc loc.line ++ doc ":" ++ doc loc.column
 
 
 def locbegin : Loc := { line := 1, column := 1, ix := 0 }
@@ -380,7 +381,7 @@ partial def find_newline_in_dir
    (dir: Int): Int :=
  if pos <= 0
  then 0
- else if pos >= s.length -1  then s.length - 1
+ else if pos >= s.length - 1 then Int.ofNat (s.length - 1)
  else if s.get pos.toNat == '\n' then pos - dir
  else find_newline_in_dir s (pos + dir) dir
 

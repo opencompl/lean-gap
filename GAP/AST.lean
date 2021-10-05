@@ -2,6 +2,8 @@ import GAP.P
 import GAP.Doc
 
 open GAP.P
+open GAP.Doc
+open GAP.Doc.Pretty
 namespace GAP.AST
 
   inductive binop_type
@@ -18,6 +20,7 @@ namespace GAP.AST
   | lt: binop_type
   | gt: binop_type
 
+  mutual
   inductive Expr
   | expr_neg: Expr -> Expr
   | expr_range2: (first: Expr) -> (last: Expr) -> Expr
@@ -32,14 +35,12 @@ namespace GAP.AST
   | expr_index: (arr: Expr) -> (ix: Expr) -> Expr
   | expr_list: (args: List Expr) -> Expr
   | expr_permutation: List (List Int) -> Expr
-
-
-  mutual
+  -- | nested functions? x(
+  | expr_fn_defn: (params: List String) -> (is_vararg?: Bool) -> (locals: List String) ->
+        (body: List Stmt) -> Expr
   inductive Stmt 
   | stmt_assign: (lhs: Expr) -> (rhs: Expr) -> Stmt
   | stmt_procedure_call: (fn: Expr) -> (args: List Expr) -> Stmt
-  | stmt_fn_defn: (params: List String) -> (is_vararg?: Bool) -> (locals: List String) ->
-        (body: List Stmt) -> Stmt
   | stmt_if: (cond: Expr)
      -> (then_: List Stmt)
      -> (elifs: List (Expr × List Stmt))
@@ -106,8 +107,12 @@ mutual
     let last <- parse_expr u
     return Expr.expr_range3 first snd last
   
+ -- | TODO: refactor for better errors!
   partial def parse_list (u: Unit) : P Expr := do 
     por (parse_list_commas u) $ (parse_list_range2 u)
+  
+  partial def parse_permutation (u: Unit): P Expr := 
+        perror "don't know how to parse permutation"
 
   partial def parse_expr_leaf (u: Unit) : P Expr := do
     match (<- ppeek_keyword) with
@@ -132,7 +137,7 @@ mutual
           else if (<- ppeek_symbol? "-") then do
              pconsume_symbol "-"
              let e <- parse_expr u
-             return new Expr.expr_neg u
+             return Expr.expr_neg e
           else do
             perror "unknown leaf expression"
            
@@ -258,12 +263,12 @@ partial def parse_fn_locals (u: Unit) : P (List String) := do
   else return []
     
   
-partial def parse_fn_defn (u: Unit) : P Stmt := do
+partial def parse_fn_defn (u: Unit) : P Expr := do
   pconsume_keyword "function"
   let (params, varargs?) <- parse_fn_args  u
   let locals <- parse_fn_locals u
   let stmts <- pmany0 (parse_stmt u)
-  return Stmt.stmt_fn_defn params varargs? locals stmts
+  return Expr.expr_fn_defn params varargs? locals stmts
 
 
 
@@ -288,22 +293,23 @@ partial def parse_if (u: Unit) : P Stmt := do
  let p_is_fi_or_elif_or_else : P Bool :=
      por (ppeek_keyword? "fi") (por (ppeek_keyword? "elif") (ppeek_keyword? "else"))
 
-  let rec pelse (u: Unit)  : P ((List (Expr × List Stmt)) × Option (List Stmt)) := do
+  let rec pelse (u: Unit)  : P  ((List (Expr × List Stmt)) × Option (List Stmt)) := 
    match (<- ppeek_keyword) with
-      | "elif" => do
+      | some "elif" => do
              let cond <- parse_expr u
              pconsume_keyword "then"
              let body <- parse_stmts p_is_fi_or_elif_or_else u
              let (elifs, else_) <- pelse u
              return ((cond,body)::elifs, else_)
-      | "else" => do
+      | some "else" => do
           pconsume_keyword "else"
           let stmts <- parse_stmts (ppeek_keyword? "fi") u
           pconsume_keyword "fi"
           return ([], Option.some stmts)
-      | "fi" => return ([], Option.none)
-      | _ => do
-            perror "expected elif/else/fi at end of if"
+      | some "fi" => do
+        pconsume_keyword "fi"
+        return ([], Option.none)
+      | _ => perror "expected elif/else/fi at end of if"
 
   pconsume_keyword "if"
   let cond <- parse_expr u
