@@ -1,7 +1,8 @@
 import GAP.P
 import GAP.Doc
 
-open GAP.P
+-- | no non-determinism for us!
+open GAP.P hiding por pmany0 pmany1
 open GAP.Doc
 open GAP.Doc.Pretty
 namespace GAP.AST
@@ -358,7 +359,8 @@ partial def parse_fn_args (u: Unit) : P (List String × Bool) := do
             else do
               let x <- pident!
               -- | TODO: I want to ban all uses of por.
-              let (xs, varargs?) <- por (p_rest_args u) (psuccess ([], false))
+              -- let (xs, varargs?) <- por (p_rest_args u) (psuccess ([], false))
+              let (xs, varargs?) <- (p_rest_args u)
               return (x::xs, varargs?)
     let x <- pident!
     let (xs, varargs?) <- (p_rest_args u)
