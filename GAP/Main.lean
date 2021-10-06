@@ -29,7 +29,7 @@ def main (xs: List String): IO Unit := do
   IO.eprintln "done parsing...." 
   match res with
    | Result.ok op => do
-     IO.println   "***Parse succeeded:***"
+     IO.println   "# ***Parse succeeded:***"
      IO.println $ vgroup $ op.map Pretty.doc
    | Result.err err => do
       IO.eprintln "***Parse Error:***"

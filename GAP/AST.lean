@@ -30,7 +30,7 @@ instance : Pretty binop_type where
     | binop_type.mul => "*"
     | binop_type.div => "/"
     | binop_type.exp => "^"
-    | binop_type.mod => "%"
+    | binop_type.mod => "mod"
     | binop_type.and => "and"
     | binop_type.or => "or"
     | binop_type.eq => "="
@@ -103,11 +103,10 @@ mutual
       String.join doc_cycles
     | Expr.expr_fn_defn args vararg? locals body =>
       let doc_args := intercalate_doc args ", "
-      let doc_vararg := (if (!args.isEmpty) && vararg? then "," else "") ++ 
-                        (if vararg? then "..." else "")
+      let doc_vararg :=  (if vararg? then "..." else "")
       let doc_locals : Doc := 
         if locals.isEmpty then "" 
-        else "local " ++ intercalate_doc locals ", "
+        else "local " ++ intercalate_doc locals ", " ++ ";"
     
       vgroup ["function (" ++ doc_args ++ doc_vararg ++ ")",
               nest_vgroup $ [doc_locals] ++ (body.map stmt_to_doc),
@@ -116,7 +115,7 @@ mutual
   partial def stmt_to_doc(s: Stmt): Doc := 
     match s with
     | Stmt.stmt_assign lhs rhs =>
-      expr_to_doc lhs ++ " := " ++ expr_to_doc rhs
+      expr_to_doc lhs ++ " := " ++ expr_to_doc rhs ++ ";"
     | Stmt.stmt_procedure_call fn args => 
         let doc_args := intercalate_doc (args.map expr_to_doc) ", "
         expr_to_doc fn ++ "(" ++ doc_args ++ ")" ++ ";"
@@ -126,7 +125,7 @@ mutual
       let docs_elifs : List Doc :=
         List.join ∘ elifs.map $
           (fun (cond, body) => 
-            ["elif " ++ expr_to_doc cond,
+            ["elif " ++ expr_to_doc cond ++ " then",
              nest_vgroup $ body.map stmt_to_doc]) 
       let docs_else : List Doc := 
         match else_ with 
@@ -135,7 +134,7 @@ mutual
       vgroup $  docs_if ++ docs_elifs ++ docs_else ++ [doc "fi;"]
     | Stmt.stmt_return e => "return " ++ expr_to_doc e ++ ";"
     | Stmt.stmt_for lhs rhs body =>
-        vgroup ["for" ++ lhs ++ " in " ++ expr_to_doc rhs,
+        vgroup ["for " ++ lhs ++ " in " ++ expr_to_doc rhs ++ " do",
                 nest_vgroup $ body.map stmt_to_doc, doc "od;"]  
 end
 
