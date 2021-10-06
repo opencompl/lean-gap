@@ -97,13 +97,17 @@ mutual
       let doc_cycles := 
         cycles.map (fun c => "(" ++ intercalate_doc c ", " ++ ")")
       String.join doc_cycles
+    | Expr.expr_fn_defn args vararg? locals body =>
+      let doc_args := intercalate_doc args ","
+      let doc_vararg := (if args.isEmpty then "" else ",") ++ 
+                        (if vararg? then "..." else ".")
+      let doc_locals : Doc := 
+        if locals.isEmpty then "" 
+        else "local " ++ intercalate_doc locals ", "
+    
+      vgroup ["function (" ++ doc_args ++ doc_vararg ++ ")",
+              nest_vgroup $ [doc_locals] ++ (body.map stmt_to_doc)]
 
-    | _ => "UNKNOWN"
-
-  -- | expr_permutation: List (List Int) -> Expr
-  -- -- | nested functions? x(
-  -- | expr_fn_defn: (params: List String) -> (is_vararg?: Bool) -> (locals: List String) ->
-  --       (body: List Stmt) -> Expr
   partial def stmt_to_doc(s: Stmt): Doc := ""
 end
 
