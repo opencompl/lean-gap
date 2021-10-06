@@ -69,14 +69,10 @@ mutual
   -- | prefix of another, so we are not sure how to tokenize!
   -- partial def ppeek_symbol: P (Option String) := perror "foo"
   
-  partial def ppeek_keyword : P (Option String) := do 
-   match (<- pmay pident) with 
-   | some s => if keywords.contains s then some s else none
-   | none => perror "expected keyword"
 
   partial def ppeek_keyword? (s: String): P Bool := do
    if not $ keywords.contains s then do
-     perror $ "can only keep for keywords, |" ++ s ++ "| is incorrect keyword."
+     perror $ "can only peek  keywords, |" ++ s ++ "| is not keyword."
    else do 
     match (<- pmay pident) with
     | none => return false
@@ -127,19 +123,17 @@ mutual
         perror "don't know how to parse permutation"
 
   partial def parse_expr_leaf (u: Unit) : P Expr := do
-    match (<- ppeek_keyword) with
-    | some "true" => do 
+    if (<- ppeek_keyword? "true") then  do
            pconsume_keyword "true"
            return (Expr.expr_bool true)
-    | some "false" => do
+    else if (<- ppeek_keyword? "false") then do
            pconsume_keyword "false"
            return (Expr.expr_bool false)
-    | some "not" => do
+    else if (<- ppeek_keyword? "not") then do
            pconsume_keyword "not"
            let e <- parse_expr u
            return Expr.expr_not e
-    | some x => perror $ doc "unknown keyword: |" ++ doc x ++ doc "|"
-    | none => 
+    else
        match (<- ppeek_ident) with
        | some ident => do 
            let fn <- pconsume_ident ident
@@ -306,29 +300,29 @@ partial def whileM [Monad m] (cond: m Bool) (body: m a): m (List a) := do
 
 
 
+ partial def p_is_fi_or_elif_or_else : P Bool :=
+     por (ppeek_keyword? "fi") (por (ppeek_keyword? "elif") (ppeek_keyword? "else"))
+
 -- | parse the else clause of an if then else
  partial def pelse (u: Unit)  : P  ((List (Expr × List Stmt)) × Option (List Stmt)) := do
-   match (<- ppeek_keyword) with
-      -- | some "elif" => do
-      --        let cond <- parse_expr u
-      --        pconsume_keyword "then"
-      --        let body <- parse_stmts p_is_fi_or_elif_or_else u
-      --        let (elifs, else_) <- pelse u
-      --        return ((cond,body)::elifs, else_)
-      -- | some "else" =>  do
-      --     pconsume_keyword "else"
-      --     let stmts <- parse_stmts (ppeek_keyword? "fi") u
-      --     pconsume_keyword "fi"
-      --     return ([], Option.some stmts)
-      -- | some "fi" => 
-      --   pconsume_keyword "fi"
-      --   return ([], Option.none)
-      | _ => perror "expected elif/else/fi at end of if"
+   if (<- ppeek_keyword? "elif") then do
+             let cond <- parse_expr u
+             pconsume_keyword "then"
+             let body <- parse_stmts p_is_fi_or_elif_or_else u
+             let (elifs, else_) <- pelse u
+             return ((cond,body)::elifs, else_)
+   else if (<- ppeek_keyword? "else") then do
+          pconsume_keyword "else"
+          let stmts <- parse_stmts (ppeek_keyword? "fi") u
+          pconsume_keyword "fi"
+          return ([], Option.some stmts)
+    else if (<- ppeek_keyword? "fi")  then do
+        pconsume_keyword "fi"
+        return ([], Option.none)
+   else perror "expected elif/else/fi at end of if"
 
 
 partial def parse_if (u: Unit) : P Stmt := do
-  let p_is_fi_or_elif_or_else : P Bool :=
-     por (ppeek_keyword? "fi") (por (ppeek_keyword? "elif") (ppeek_keyword? "else"))
   pconsume_keyword "if"
   let cond <- parse_expr u
   pconsume_keyword "then"
@@ -360,10 +354,9 @@ partial def parse_for(u: Unit): P Stmt := do
   return Stmt.stmt_for var e body
 
   partial def parse_stmt (u: Unit) : P Stmt := do
-  match (<- ppeek_keyword) with
-  | some "if" => parse_if u
-  | some "for" => parse_for u
-  | _ => parse_assgn_or_procedure_call u
+  if (<- ppeek_keyword? "if") then parse_if u
+  else if (<- ppeek_keyword? "for") then parse_for u
+  else parse_assgn_or_procedure_call u
 
 
   -- | note to self: these give *worse* error messages!
