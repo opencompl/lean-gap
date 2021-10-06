@@ -260,12 +260,15 @@ mutual
     else if (<- psym? "(") then do 
       -- either (expr) or (expr, expr, expr, ...) [for permutation]
       psym! "("
-      let e <- parse_expr u
       if (<- psym? ")")
-      then do psym! ")"; return e
-      else do -- must have a comma
-        psym! ","
-        parse_permutation e u
+      then do psym! ")"; return Expr.expr_permutation [[]] -- empty permutation
+      else do 
+        let e <- parse_expr u
+        if (<- psym? ")")
+        then do psym! ")"; return e
+        else do -- must have a comma
+          psym! ","
+          parse_permutation e u
     else if (<- psym? "-") then do
              psym! "-"
              let e <- parse_expr u
