@@ -198,13 +198,20 @@ partial def ppeek_symbol? (sym: String): P Bool :=  {
      return (loc, notes, s, Result.ok (isPrefixOf sym s))
 }
 
+private def padvance_str_INTERNAL (s: String) : P Unit := {
+  runP := λ loc ns scur => (advance loc s, ns, drop scur (length s), Result.ok ())
+}
+
+
 partial def pconsume_symbol (s: String): P Unit := do
   match (<- ppeek_symbol? s) with
-  | true => psuccess ()
+  | true => 
+     padvance_str_INTERNAL s
+     psuccess ()
   | false => perror $ "expected symbol |" ++ s ++ "|"
 
 
-def padvance_char_INTERNAL (c: Char) : P Unit := {
+private def padvance_char_INTERNAL (c: Char) : P Unit := {
   runP := λ loc ns haystack => (advance1 loc c, ns, drop haystack 1, Result.ok ())
 }
 
@@ -244,15 +251,6 @@ def eat_whitespace : P Unit := {
     (l', ns, s', Result.ok ())
   }
 
-partial def ppeek_ident: P (Option String) := do
-  eat_whitespace
-  let mc <- ppeek
-  match mc with
-  | Option.none => return Option.none
-  | Option.some c => 
-    match c.isAlpha with -- is alphabet, so it starts an identifier
-      | false => return Option.none 
-      | true => ppeekwhile (fun c => c.isAlphanum || c == '_')
 
 partial def takeWhile (predicate: Char -> Bool)
    (startloc: Loc)
@@ -278,16 +276,33 @@ partial def ptakewhile (predicateWhile: Char -> Bool) : P String :=
 
 
 -- | take an identifier. TODO: ban symbols
-def pident : P String := do
-  eat_whitespace 
-  ptakewhile (fun c => (c != ' ' && c != '\t' && c != '\n') && (isAlphanum c || c == '_'))
 
-def pident? (s: String) : P Unit := do
-   let i <- pident
-   pnote $ "pident? looking for ident: " ++ s ++ " | found: |" ++ i ++ "|"
-   if i == s
-   then psuccess ()
-   else perror $ "expected |" ++ s ++ "| but found |" ++ i ++ "|"
+partial def ppeek_ident: P (Option String) := do
+  eat_whitespace
+  let mc <- ppeek
+  match mc with
+  | Option.none => return Option.none
+  | Option.some c => 
+    match c.isAlpha with -- is alphabet, so it starts an identifier
+      | false => return Option.none 
+      | true => ppeekwhile (fun c => c.isAlphanum || c == '_')
+
+def pident : P String := do
+  match (<- ppeek_ident) with
+  | some s => do 
+        padvance_str_INTERNAL s
+        return s
+  | none => perror "expected identifier."
+
+def pident? (s: String): P Bool := do
+  match (<- ppeek_ident) with
+  | some t => return  s == t
+  | none => return False
+
+def pconsume_ident (s: String) : P Unit := do
+  match (<- pident? s) with
+  | true => padvance_str_INTERNAL s
+  | false => perror $ "expected to find identifier |" ++ s ++ "|"
 
 
 def pnumber : P Int := do

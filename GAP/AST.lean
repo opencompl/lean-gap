@@ -75,9 +75,12 @@ mutual
    | none => perror "expected keyword"
 
   partial def ppeek_keyword? (s: String): P Bool := do
-   match (<- ppeek_keyword) with
+   if not $ keywords.contains s then do
+     perror $ "can only keep for keywords, |" ++ s ++ "| is incorrect keyword."
+   else do 
+    match (<- pmay pident) with
     | none => return false
-    | some k' => return s == k'
+    | some s' => return s == s'
 
   partial def pconsume_keyword (s: String) : P Unit := do
      match (<- ppeek_keyword? s) with
@@ -138,7 +141,12 @@ mutual
     | some x => perror $ doc "unknown keyword: |" ++ doc x ++ doc "|"
     | none => 
        match (<- ppeek_ident) with
-       | some ident => return Expr.expr_var ident
+       | some ident => do 
+           let fn <- pconsume_ident ident
+           if (<- ppeek_symbol? "(") then do
+             let args <- pintercalated '(' (parse_expr u) ',' ')'
+             return Expr.expr_fn_call ident args
+           else return Expr.expr_var ident
        | none => 
           if (<- ppeek_symbol? "[") then parse_list u
           else if (<- ppeek_keyword? "function") then parse_fn_defn u
