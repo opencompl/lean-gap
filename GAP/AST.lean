@@ -70,14 +70,15 @@ mutual
   -- | prefix of another, so we are not sure how to tokenize!
   -- partial def ppeek_symbol: P (Option String) := perror "foo"
   
-
+  -- | TODO: rewrite using low level API?
   partial def pkwd? (s: String): P Bool := do
    if not $ keywords.contains s then do
      perror $ "can only peek  keywords, |" ++ s ++ "| is not keyword."
-   else do 
-    match (<- pmay pident) with
-    | none => return false
-    | some s' => return s == s'
+   else 
+     let psym : P Bool := do
+        let id <- pident!
+        if s == id then return true else perror "using error to backtrack"
+     por psym  (psuccess false)
 
   partial def pkwd! (s: String) : P Unit := do
      match (<- pkwd? s) with
@@ -86,15 +87,15 @@ mutual
 
   partial def parse_expr_logical (u: Unit): P Expr := do 
     let l <- parse_expr_compare u
-    let kwd <- ppeek_ident
-    match kwd with
-    | some "and" => do
+    if (<- pkwd? "and") then do
+        pkwd! "and"
         let r <- parse_expr u
         return Expr.expr_binop l binop_type.and r
-    | some "or" => do
+    else if (<- pkwd? "or") then do
+        pkwd! "or"
         let r <- parse_expr u
         return Expr.expr_binop l binop_type.or r
-    | _ => return l
+    else  return l
 
   partial def parse_list_commas (u: Unit) : P Expr := do
     let args <- pintercalated '[' (parse_expr u) ',' ']'
@@ -124,6 +125,7 @@ mutual
         perror "don't know how to parse permutation"
 
   partial def parse_expr_leaf (u: Unit) : P Expr := do
+    pdebugfail $ "parsing leaf"
     if (<- pkwd? "true") then  do
            pkwd! "true"
            return (Expr.expr_bool true)
@@ -134,24 +136,21 @@ mutual
            pkwd! "not"
            let e <- parse_expr u
            return Expr.expr_not e
-    else
-       match (<- ppeek_ident) with
-       | some ident => do 
-           let fn <- pconsume_ident ident
+    else if (<- pident?) then do
+           let ident <- pident!
+           pdebugfail $ "found potential function: |" ++ ident ++ "|"
            if (<- psym? "(") then do
              let args <- pintercalated '(' (parse_expr u) ',' ')'
              return Expr.expr_fn_call ident args
            else return Expr.expr_var ident
-       | none => 
-          if (<- psym? "[") then parse_list u
-          else if (<- pkwd? "function") then parse_fn_defn u
-          else if (<- psym? "(") then parse_permutation u
-          else if (<- psym? "-") then do
+    else if (<- psym? "[") then parse_list u
+    else if (<- pkwd? "function") then parse_fn_defn u
+    else if (<- psym? "(") then parse_permutation u
+    else if (<- psym? "-") then do
              psym! "-"
              let e <- parse_expr u
              return Expr.expr_neg e
-          else do
-            perror "unknown leaf expression"
+    else perror "unknown leaf expression"
            
     
   partial def parse_expr_index (u: Unit) : P Expr := do
@@ -238,10 +237,6 @@ partial def parse_expr_compare (u: Unit) : P Expr := do
   else return l
  
 
-partial def parse_var : P String := do
-  let x <- pident
-  return  x
-
 --  | returns true/false based on whether varargs or not
 partial def parse_fn_args (u: Unit) : P (List String × Bool) := do
   psym! "("
@@ -258,10 +253,10 @@ partial def parse_fn_args (u: Unit) : P (List String × Bool) := do
               psym! ")"
               return ([], true)
           else do
-            let x <- parse_var
+            let x <- pident!
             let (xs, varargs?) <- por (p_rest_args u) (psuccess ([], false))
             return (x::xs, varargs?)
-    let x <- parse_var
+    let x <- pident!
     let (xs, varargs?) <- (p_rest_args u)
     return (x::xs, varargs?)
    
@@ -269,7 +264,7 @@ partial def parse_fn_locals (u: Unit) : P (List String) := do
   if (<- pkwd? "local") 
   then do
     pkwd! "local"
-    let xs <- ppeekstar ',' pident
+    let xs <- ppeekstar ',' pident!
     psym! ";"
     return xs
   else return []
@@ -334,6 +329,7 @@ partial def parse_if (u: Unit) : P Stmt := do
 
 partial def parse_assgn_or_procedure_call (u: Unit) : P Stmt := do
    let lhs <- parse_expr u
+   pdebugfail $ "parsing assignment. LHS: "
    if (<- psym? "(") then do
      let args <- pintercalated '(' (parse_expr u) ',' ')'
      return Stmt.stmt_procedure_call lhs args
@@ -347,7 +343,7 @@ partial def parse_assgn_or_procedure_call (u: Unit) : P Stmt := do
 
 partial def parse_for(u: Unit): P Stmt := do
   pkwd! "for"
-  let var <- pident
+  let var <- pident!
   pkwd! "in"
   let e <- parse_expr u
   pkwd! "do"

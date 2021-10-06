@@ -277,33 +277,28 @@ partial def ptakewhile (predicateWhile: Char -> Bool) : P String :=
 
 -- | take an identifier. TODO: ban symbols
 
-partial def ppeek_ident: P (Option String) := do
+partial def pident?: P Bool := do
   eat_whitespace
   let mc <- ppeek
   match mc with
-  | Option.none => return Option.none
+  | Option.none => return false
+  | Option.some c => return c.isAlpha
+    
+
+def pident! : P String := do
+   eat_whitespace
+   let mc <- ppeek
+   match mc with
+  | Option.none => perror $ "expected identifier, found EOF"
   | Option.some c => 
     match c.isAlpha with -- is alphabet, so it starts an identifier
-      | false => return Option.none 
-      | true => ppeekwhile (fun c => c.isAlphanum || c == '_')
-
-def pident : P String := do
-  match (<- ppeek_ident) with
-  | some s => do 
-        padvance_str_INTERNAL s
-        return s
-  | none => perror "expected identifier."
-
-def pident? (s: String): P Bool := do
-  match (<- ppeek_ident) with
-  | some t => return  s == t
-  | none => return False
-
-def pconsume_ident (s: String) : P Unit := do
-  match (<- pident? s) with
-  | true => padvance_str_INTERNAL s
-  | false => perror $ "expected to find identifier |" ++ s ++ "|"
-
+      | false => 
+         perror $ "expected identifier to start with alphabet, found: |" ++ c.toString ++ "|"
+      | true => do 
+         let s <- ppeekwhile (fun c => c.isAlphanum || c == '_')
+         padvance_str_INTERNAL s
+         return s
+ 
 
 def pnumber : P Int := do
   eat_whitespace
