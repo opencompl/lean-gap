@@ -59,7 +59,8 @@ instance : Coe (List Stmt) Block where
  -- abbrev Block := List Stmt
 
 
-def keywords : List String := ["if", "else", "do", "od"]
+def keywords : List String := ["if", "else", "do", "od", "for", "true", "false", "not",
+                               "function"]
 
 mutual
 
@@ -70,7 +71,7 @@ mutual
   -- partial def ppeek_symbol: P (Option String) := perror "foo"
   
 
-  partial def ppeek_keyword? (s: String): P Bool := do
+  partial def pkwd? (s: String): P Bool := do
    if not $ keywords.contains s then do
      perror $ "can only peek  keywords, |" ++ s ++ "| is not keyword."
    else do 
@@ -78,8 +79,8 @@ mutual
     | none => return false
     | some s' => return s == s'
 
-  partial def pconsume_keyword (s: String) : P Unit := do
-     match (<- ppeek_keyword? s) with
+  partial def pkwd! (s: String) : P Unit := do
+     match (<- pkwd? s) with
      | true => psuccess ()
      | false => perror $ "expected keyword: |" ++ s ++ "|"
 
@@ -123,14 +124,14 @@ mutual
         perror "don't know how to parse permutation"
 
   partial def parse_expr_leaf (u: Unit) : P Expr := do
-    if (<- ppeek_keyword? "true") then  do
-           pconsume_keyword "true"
+    if (<- pkwd? "true") then  do
+           pkwd! "true"
            return (Expr.expr_bool true)
-    else if (<- ppeek_keyword? "false") then do
-           pconsume_keyword "false"
+    else if (<- pkwd? "false") then do
+           pkwd! "false"
            return (Expr.expr_bool false)
-    else if (<- ppeek_keyword? "not") then do
-           pconsume_keyword "not"
+    else if (<- pkwd? "not") then do
+           pkwd! "not"
            let e <- parse_expr u
            return Expr.expr_not e
     else
@@ -143,7 +144,7 @@ mutual
            else return Expr.expr_var ident
        | none => 
           if (<- ppeek_symbol? "[") then parse_list u
-          else if (<- ppeek_keyword? "function") then parse_fn_defn u
+          else if (<- pkwd? "function") then parse_fn_defn u
           else if (<- ppeek_symbol? "(") then parse_permutation u
           else if (<- ppeek_symbol? "-") then do
              pconsume_symbol "-"
@@ -208,7 +209,7 @@ partial def parse_arith_add_sub_mod (u: Unit) : P Expr := do
          let r <- parse_expr u
          return Expr.expr_binop l binop_type.sub r
     | some 'm' => do
-           match (<- ppeek_keyword? "mod") with
+           match (<- pkwd? "mod") with
               | true => do
                   let r <- parse_expr u
                   return Expr.expr_binop l binop_type.mod r
@@ -265,9 +266,9 @@ partial def parse_fn_args (u: Unit) : P (List String × Bool) := do
     return (x::xs, varargs?)
    
 partial def parse_fn_locals (u: Unit) : P (List String) := do
-  if (<- ppeek_keyword? "local") 
+  if (<- pkwd? "local") 
   then do
-    pconsume_keyword "local"
+    pkwd! "local"
     let xs <- ppeekstar ',' pident
     pconsume_symbol ";"
     return xs
@@ -275,7 +276,7 @@ partial def parse_fn_locals (u: Unit) : P (List String) := do
     
   
 partial def parse_fn_defn (u: Unit) : P Expr := do
-  pconsume_keyword "function"
+  pkwd! "function"
   let (params, varargs?) <- parse_fn_args  u
   let locals <- parse_fn_locals u
   let stmts <- pmany0 (parse_stmt u)
@@ -301,31 +302,31 @@ partial def whileM [Monad m] (cond: m Bool) (body: m a): m (List a) := do
 
 
  partial def p_is_fi_or_elif_or_else : P Bool :=
-     por (ppeek_keyword? "fi") (por (ppeek_keyword? "elif") (ppeek_keyword? "else"))
+     por (pkwd? "fi") (por (pkwd? "elif") (pkwd? "else"))
 
 -- | parse the else clause of an if then else
  partial def pelse (u: Unit)  : P  ((List (Expr × List Stmt)) × Option (List Stmt)) := do
-   if (<- ppeek_keyword? "elif") then do
+   if (<- pkwd? "elif") then do
              let cond <- parse_expr u
-             pconsume_keyword "then"
+             pkwd! "then"
              let body <- parse_stmts p_is_fi_or_elif_or_else u
              let (elifs, else_) <- pelse u
              return ((cond,body)::elifs, else_)
-   else if (<- ppeek_keyword? "else") then do
-          pconsume_keyword "else"
-          let stmts <- parse_stmts (ppeek_keyword? "fi") u
-          pconsume_keyword "fi"
+   else if (<- pkwd? "else") then do
+          pkwd! "else"
+          let stmts <- parse_stmts (pkwd? "fi") u
+          pkwd! "fi"
           return ([], Option.some stmts)
-    else if (<- ppeek_keyword? "fi")  then do
-        pconsume_keyword "fi"
+    else if (<- pkwd? "fi")  then do
+        pkwd! "fi"
         return ([], Option.none)
    else perror "expected elif/else/fi at end of if"
 
 
 partial def parse_if (u: Unit) : P Stmt := do
-  pconsume_keyword "if"
+  pkwd! "if"
   let cond <- parse_expr u
-  pconsume_keyword "then"
+  pkwd! "then"
   let body <- parse_stmts p_is_fi_or_elif_or_else u
   let (elifs, else_) <- pelse u
   return Stmt.stmt_if cond body elifs else_
@@ -345,17 +346,17 @@ partial def parse_assgn_or_procedure_call (u: Unit) : P Stmt := do
   
 
 partial def parse_for(u: Unit): P Stmt := do
-  pconsume_keyword "for"
+  pkwd! "for"
   let var <- pident
-  pconsume_keyword "in"
+  pkwd! "in"
   let e <- parse_expr u
-  pconsume_keyword "do"
-  let body <- parse_stmts (ppeek_keyword? "od") u
+  pkwd! "do"
+  let body <- parse_stmts (pkwd? "od") u
   return Stmt.stmt_for var e body
 
   partial def parse_stmt (u: Unit) : P Stmt := do
-  if (<- ppeek_keyword? "if") then parse_if u
-  else if (<- ppeek_keyword? "for") then parse_for u
+  if (<- pkwd? "if") then parse_if u
+  else if (<- pkwd? "for") then parse_for u
   else parse_assgn_or_procedure_call u
 
 
