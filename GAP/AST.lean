@@ -79,9 +79,9 @@ mutual
     match e with
     | Expr.expr_neg f => "-" ++ expr_to_doc f
     | Expr.expr_range2  a z => 
-        "[" ++ expr_to_doc a ++ ".." ++ expr_to_doc z
+        "[" ++ expr_to_doc a ++ ".." ++ expr_to_doc z ++ "]"
     | Expr.expr_range3 a b z =>
-        "[" ++ expr_to_doc a ++ ", " ++ expr_to_doc b ++ ".." ++ expr_to_doc z 
+        "[" ++ expr_to_doc a ++ ", " ++ expr_to_doc b ++ ".." ++ expr_to_doc z ++ "]" 
     | Expr.expr_bool b => if b then "true" else "false"
     | Expr.expr_num i => doc i
     | Expr.expr_fn_call f xs =>
@@ -194,7 +194,6 @@ mutual
     else  return l
 
   partial def parse_list_commas (u: Unit) : P Expr := do
-    pnote $ "parsing list with commas"
     let args <- pintercalated '[' (parse_expr u) ',' ']'
     return  (Expr.expr_list args)
 
@@ -220,16 +219,16 @@ mutual
 -- 21. ranges
 -- https://www.gap-system.org/Manuals/doc/ref/chap21.html#X79596BDE7CAF8491
   partial def parse_list (u: Unit) : P Expr := do 
-    pnote $ "parsing list"
-    -- parse_list_commas u
     por (parse_list_range2 u) $ (parse_list_commas u)
   
   -- | parse the rest of the permutation given the first element.
   -- The cursor is at the first comma:
   -- (a , b , c)
   --    ^
-  partial def parse_permutation (e: Expr) (u: Unit): P Expr := do
+  partial def parse_permutation_at_comma (e: Expr) (u: Unit): P Expr := do
     -- go := "," arg ")" | "," arg go   
+    pnote $ "parsing permutation"
+
     psym! ","
     let es <- pCommasUntil1 (parse_expr u) "," ")"
     let cyc0 := e :: es -- first cycle
@@ -270,8 +269,7 @@ mutual
         if (<- psym? ")")
         then do psym! ")"; return e
         else do -- must have a comma
-          psym! ","
-          parse_permutation e u
+          parse_permutation_at_comma e u
     else if (<- psym? "-") then do
              psym! "-"
              let e <- parse_expr u
@@ -353,7 +351,7 @@ partial def parse_arith_add_sub_mod (u: Unit) : P Expr := do
   let l <- parse_arith_mul_div u
   match (<- ppeek) with
     | some '+' => do
-         pconsume '*'
+         pconsume '+'
          let r <- parse_expr u
          return Expr.expr_binop l binop_type.add r
     | some '-' => do
@@ -431,13 +429,9 @@ partial def parse_fn_locals (u: Unit) : P (List String) := do
     
   
 partial def parse_fn_defn (u: Unit) : P Expr := do
-  pnote $ "parsing function"
   pkwd! "function"
-  pnote $ "parsing function args"
   let (params, varargs?) <- parse_fn_args  u
-  pnote $ "parsing function locals..."
   let locals <- parse_fn_locals u
-  pnote $ ". parsing statements"
   let stmts <- parse_stmts (pkwd? "end") u
   pkwd! "end"
   return Expr.expr_fn_defn params varargs? locals stmts
@@ -483,11 +477,8 @@ partial def parse_stmts (pstop?: P Bool) (u: Unit) : P (List Stmt) := do
 
 partial def parse_if (u: Unit) : P Stmt := do
   pkwd! "if"
-  pnote $ "parsing if"
   let cond <- parse_expr u
-  pnote $ "found if condition: |" ++ doc cond ++ "|"
   pkwd! "then"
-  pnote $ "found if then. Now parsing body"
   let body <- parse_stmts p_is_fi_or_elif_or_else u
   let (elifs, else_) <- pelse u
   psym! ";"
@@ -532,7 +523,6 @@ partial def parse_for(u: Unit): P Stmt := do
   else if (<- pkwd? "return") then do
     pkwd! "return"
     let e <- parse_expr u
-    pnote $ "found return expr |" ++ doc e ++ "|"
     psym! ";"
     return Stmt.stmt_return e
   else parse_assgn_or_procedure_call u

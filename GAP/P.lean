@@ -302,13 +302,6 @@ partial def ptakewhile (predicateWhile: Char -> Bool) : P String :=
 
 -- | take an identifier. TODO: ban symbols
 
-partial def pident?: P Bool := do
-  eat_whitespace
-  let mc <- ppeek
-  match mc with
-  | Option.none => return false
-  | Option.some c => return c.isAlpha
-    
 
 def pident! : P String := do
    eat_whitespace
@@ -316,13 +309,14 @@ def pident! : P String := do
    match mc with
   | Option.none => perror $ "expected identifier, found EOF"
   | Option.some c => 
-    match c.isAlpha with -- is alphabet, so it starts an identifier
-      | false => 
-         perror $ "expected identifier to start with alphabet, found: |" ++ c.toString ++ "|"
-      | true => do 
          let s <- ppeekwhile (fun c => c.isAlphanum || c == '_')
+         match s.toNat? with 
+         | some nat => perror $ "expected identifier, found number |" ++ toString nat ++ "|"
+         | none => psuccess () 
          padvance_str_INTERNAL s
          return s
+
+partial def pident?: P Bool := p2peek? pident!    
  
 
 def pnumber : P Int := do
@@ -332,7 +326,10 @@ def pnumber : P Int := do
     if not leading.isDigit
     then perror $ "expected number, found |" ++ doc leading ++ "|"
     else 
-      let name <- ptakewhile (fun c => c.isDigit)
+      -- | take till whitespace, then convert to number
+      -- this is to ensure that things like '2n' [which are legal identifiers in gap!]
+      -- are considered identifiers, not numbers.
+      let name <- ptakewhile (fun c => c.isAlphanum || c == '_')
       match name.toInt? with
       | some num => return num
       | none => perror $ "expected number, found |" ++ name ++ "|."
