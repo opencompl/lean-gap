@@ -41,6 +41,7 @@ mutual
   | expr_range2: (first: Expr) -> (last: Expr) -> Expr
   | expr_range3: (first: Expr) -> (second: Expr) -> (last: Expr) -> Expr
   | expr_bool: Bool -> Expr
+  | expr_num: Int -> Expr
   | expr_fn_call: (name: String) -> (args: List Expr) -> Expr
   | expr_list_composition: (lhs: String) -> (rhs: Expr) -> Expr
   | expr_var: String -> Expr
@@ -79,8 +80,9 @@ mutual
     | Expr.expr_range3 a b z =>
         "[" ++ expr_to_doc a ++ ", " ++ expr_to_doc b ++ ".." ++ expr_to_doc z 
     | Expr.expr_bool b => if b then "true" else "false"
+    | Expr.expr_num i => doc i
     | Expr.expr_fn_call f xs =>
-        let doc_xs := intercalate_doc (List.map expr_to_doc xs) "," 
+        let doc_xs := intercalate_doc (List.map expr_to_doc xs) ", " 
         f ++ "(" ++  doc_xs ++ ")"
     | Expr.expr_list_composition lhs rhs =>
         lhs ++ "{" ++ expr_to_doc rhs ++ "}" -- TODO: vgroup?
@@ -92,14 +94,14 @@ mutual
     | Expr.expr_index arr ix => 
       expr_to_doc arr ++ "[" ++ expr_to_doc ix ++ "]"
     | Expr.expr_list args => 
-      "[" ++ intercalate_doc (args.map expr_to_doc) "," ++ "]"
+      "[" ++ intercalate_doc (args.map expr_to_doc) ", " ++ "]"
     | Expr.expr_permutation cycles => 
       let doc_cycles := 
         cycles.map (fun c => "(" ++ intercalate_doc c ", " ++ ")")
       String.join doc_cycles
     | Expr.expr_fn_defn args vararg? locals body =>
-      let doc_args := intercalate_doc args ","
-      let doc_vararg := (if args.isEmpty then "" else ",") ++ 
+      let doc_args := intercalate_doc args ", "
+      let doc_vararg := (if args.isEmpty then "" else ", ") ++ 
                         (if vararg? then "..." else ".")
       let doc_locals : Doc := 
         if locals.isEmpty then "" 
@@ -113,8 +115,8 @@ mutual
     | Stmt.stmt_assign lhs rhs =>
       expr_to_doc lhs ++ " := " ++ expr_to_doc rhs
     | Stmt.stmt_procedure_call fn args => 
-        let doc_args := intercalate_doc (args.map expr_to_doc) ","
-        expr_to_doc fn ++ "(" ++ doc_args ++ ")"
+        let doc_args := intercalate_doc (args.map expr_to_doc) ", "
+        expr_to_doc fn ++ "(" ++ doc_args ++ ")" ++ ";"
     | Stmt.stmt_if cond then_ elifs else_ =>
       let docs_if : List Doc := 
         ["if " ++ expr_to_doc cond ++ " then", nest_vgroup $ then_.map stmt_to_doc] 
@@ -127,11 +129,11 @@ mutual
         match else_ with 
         | some else_ => ["else", nest_vgroup $ else_.map stmt_to_doc]
         | none => []      
-      vgroup $  docs_if ++ docs_elifs ++ docs_else
-    | Stmt.stmt_return e => "return " ++ expr_to_doc e
+      vgroup $  docs_if ++ docs_elifs ++ docs_else ++ [doc "fi;"]
+    | Stmt.stmt_return e => "return " ++ expr_to_doc e ++ ";"
     | Stmt.stmt_for lhs rhs body =>
         vgroup ["for" ++ lhs ++ " in " ++ expr_to_doc rhs,
-                nest_vgroup $ body.map stmt_to_doc] 
+                nest_vgroup $ body.map stmt_to_doc, doc "od;"]  
 end
 
 instance : Pretty Expr where
@@ -146,7 +148,8 @@ def keywords : List String :=
    , "for"
    , "true", "false"
    , "and", "or", "not"
-   , "function"]
+   , "function"
+   , "local"]
 
 mutual
 
@@ -159,17 +162,13 @@ mutual
   -- | TODO: rewrite using low level API?
   partial def pkwd? (s: String): P Bool := do
    if not $ keywords.contains s then do
-     perror $ "can only peek  keywords, |" ++ s ++ "| is not keyword."
-   else 
-     let psym : P Bool := do
-        let id <- pident!
-        if s == id then return true else perror "using error to backtrack"
-     por psym  (psuccess false)
+     pdebugfail $ "can only peek  keywords, |" ++ s ++ "| is not keyword."
+   else psym? s -- TODO, HACK: this reuses symbol. 
 
   partial def pkwd! (s: String) : P Unit := do
-     match (<- pkwd? s) with
-     | true => psuccess ()
-     | false => perror $ "expected keyword: |" ++ s ++ "|"
+   if not $ keywords.contains s then do
+     pdebugfail $ "can only peek  keywords, |" ++ s ++ "| is not keyword."
+   else psym! s -- TODO, HACK: this reuses symbol.
 
   partial def parse_expr_logical (u: Unit): P Expr := do 
     let l <- parse_expr_compare u
@@ -224,19 +223,23 @@ mutual
            pkwd! "not"
            let e <- parse_expr u
            return Expr.expr_not e
+    else if (<- pkwd? "function") then 
+      do parse_fn_defn u
+    else if (<- psym? "[") then parse_list u
+    else if (<- psym? "(") then parse_permutation u
+    else if (<- psym? "-") then do
+             psym! "-"
+             let e <- parse_expr u
+             return Expr.expr_neg e
+    else if (<- p2peek? pnumber) then do
+      let n <- pnumber
+      return Expr.expr_num n
     else if (<- pident?) then do
            let ident <- pident!
            if (<- psym? "(") then do
              let args <- pintercalated '(' (parse_expr u) ',' ')'
              return Expr.expr_fn_call ident args
            else return Expr.expr_var ident
-    else if (<- psym? "[") then parse_list u
-    else if (<- pkwd? "function") then parse_fn_defn u
-    else if (<- psym? "(") then parse_permutation u
-    else if (<- psym? "-") then do
-             psym! "-"
-             let e <- parse_expr u
-             return Expr.expr_neg e
     else perror "unknown leaf expression"
            
     
@@ -328,23 +331,31 @@ partial def parse_expr_compare (u: Unit) : P Expr := do
 partial def parse_fn_args (u: Unit) : P (List String × Bool) := do
   psym! "("
   if (<- psym? ")")
-  then (return [], false)
+  then do
+    psym! ")"
+    return ([], false)
   else do
-    -- <rest_args> = ", <arg>  [<rest_args> | ")"]
+    -- <rest_args> = ")" | "," "..." ")" | ", " <arg>  <rest_args>
     -- | TODO: consider using ppeekstar!
     let rec p_rest_args (u: Unit): P (List String × Bool) := do
-          pconsume ','
-          if (<- psym? "...") 
-          then do
-              psym! "..."
-              psym! ")"
-              return ([], true)
+          if (<- psym? ")") then do
+            psym! ")"
+            return ([], false)
           else do
-            let x <- pident!
-            let (xs, varargs?) <- por (p_rest_args u) (psuccess ([], false))
-            return (x::xs, varargs?)
+            pconsume ','
+            if (<- psym? "...") 
+            then do
+                psym! "..."
+                psym! ")"
+                return ([], true)
+            else do
+              let x <- pident!
+              let (xs, varargs?) <- por (p_rest_args u) (psuccess ([], false))
+              return (x::xs, varargs?)
     let x <- pident!
+    pnote $ "parsed first arg"
     let (xs, varargs?) <- (p_rest_args u)
+    pnote $ "parsed rest arg"
     return (x::xs, varargs?)
    
 partial def parse_fn_locals (u: Unit) : P (List String) := do
@@ -358,9 +369,13 @@ partial def parse_fn_locals (u: Unit) : P (List String) := do
     
   
 partial def parse_fn_defn (u: Unit) : P Expr := do
+  pnote $ "parsing function"
   pkwd! "function"
+  pnote $ "parsing function args"
   let (params, varargs?) <- parse_fn_args  u
+  pnote $ "parsing function locals..."
   let locals <- parse_fn_locals u
+  pnote $ ". parsing statements"
   let stmts <- pmany0 (parse_stmt u)
   return Expr.expr_fn_defn params varargs? locals stmts
 
@@ -407,10 +422,12 @@ partial def whileM [Monad m] (cond: m Bool) (body: m a): m (List a) := do
 
 partial def parse_if (u: Unit) : P Stmt := do
   pkwd! "if"
+  pnote $ "parsing if"
   let cond <- parse_expr u
   pkwd! "then"
   let body <- parse_stmts p_is_fi_or_elif_or_else u
   let (elifs, else_) <- pelse u
+  psym! ";"
   return Stmt.stmt_if cond body elifs else_
 
 
@@ -418,10 +435,12 @@ partial def parse_assgn_or_procedure_call (u: Unit) : P Stmt := do
    let lhs <- pident! -- TODO: this seems like a hack to mex
    if (<- psym? "(") then do
      let args <- pintercalated '(' (parse_expr u) ',' ')'
+     psym! ";"
      return Stmt.stmt_procedure_call (Expr.expr_var lhs) args
    else if (<- psym? ":=") then do
      psym! ":="
      let rhs <- parse_expr u
+     psym! ";"
      return Stmt.stmt_assign (Expr.expr_var lhs) rhs
    else perror "expected assignment with := or function call with (...) at toplevel"
 
@@ -434,12 +453,13 @@ partial def parse_for(u: Unit): P Stmt := do
   let e <- parse_expr u
   pkwd! "do"
   let body <- parse_stmts (pkwd? "od") u
+  psym! ";"
   return Stmt.stmt_for var e body
 
   partial def parse_stmt (u: Unit) : P Stmt := do
-  if (<- pkwd? "if") then parse_if u <* psym! ";"
-  else if (<- pkwd? "for") then parse_for u <* psym! ";"
-  else parse_assgn_or_procedure_call u <* psym! ";"
+  if (<- pkwd? "if") then parse_if u
+  else if (<- pkwd? "for") then parse_for u
+  else parse_assgn_or_procedure_call u
 
 
   -- | note to self: these give *worse* error messages!

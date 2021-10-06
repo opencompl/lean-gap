@@ -133,6 +133,8 @@ def psuccess (v: a): P a := {
   }
 
 
+-- | run p. if it accepts, return the result. 
+-- | if it fails, then return none
 def pmay (p: P a): P (Option a) := { 
     runP := λ loc ns s  => 
       match p.runP loc ns s with
@@ -140,6 +142,18 @@ def pmay (p: P a): P (Option a) := {
         | (loc, ns, s, Result.err e) => (loc, ns, s, Result.ok Option.none)
         | (l, ns, s, Result.debugfail e) => (l, ns, s, Result.debugfail e)
   }
+
+-- | run p. if it accepts, then retun te *old* state with true.
+-- if it fails, then return the *old* state with false.
+-- effectively converts any p into its peeking version.
+def p2peek? (p: P a): P Bool := { 
+    runP := λ loc ns s  => 
+      match p.runP loc ns s with
+        |  (loc', ns', s', Result.ok v) => (loc, ns, s, Result.ok true)
+        | (loc', ns', s', Result.err e) => (loc, ns, s, Result.ok false)
+        | (loc', ns', s', Result.debugfail e) => (loc', ns', s', Result.debugfail e)
+  }
+
 
 
 -- try p. if success, return value. if not, run q
@@ -378,18 +392,18 @@ partial def ppeekstar (l: Char) (p: P a) : P (List a) := do
   else return []
 
 
-partial def  pmany0  (p: P a) : P (List a) := do
+partial def pmany0 [Pretty a]  (p: P a) : P (List a) := do
   match (<- pmay p) with
     | Option.some a => do
-        -- pnote $ "pmany0: found " ++ doc a
+        pnote $ "pmany0: found " ++ doc a
         let as <- pmany0 p
         return (a::as)
     | Option.none =>
-        -- pnote $ "pmany0: found none"
+        pnote $ "pmany0: found none"
        return []
 
 -- | parse <p>+ for a given <p>
-partial def  pmany1 (p: P a) : P (List a) := do
+partial def  pmany1 [Pretty a] (p: P a) : P (List a) := do
   let a1 <- p
   let as <- pmany0 p
   return (a1::as)
