@@ -20,7 +20,22 @@ namespace GAP.AST
   | lt: binop_type
   | gt: binop_type
 
-  mutual
+instance : Pretty binop_type where
+  doc (bop: binop_type) := 
+    match bop with
+    | binop_type.add => "+"
+    | binop_type.sub => "-"
+    | binop_type.mul => "*"
+    | binop_type.div => "/"
+    | binop_type.exp => "^"
+    | binop_type.mod => "%"
+    | binop_type.and => "and"
+    | binop_type.or => "or"
+    | binop_type.eq => "="
+    | binop_type.neq => "<>"
+    | binop_type.lt => "<"
+    | binop_type.gt => ">"
+mutual
   inductive Expr
   | expr_neg: Expr -> Expr
   | expr_range2: (first: Expr) -> (last: Expr) -> Expr
@@ -55,9 +70,48 @@ namespace GAP.AST
 instance : Coe (List Stmt) Block where
    coe (xs: List Stmt) := Block.mk xs
 
- -- | a block is a sequence of statements.
- -- abbrev Block := List Stmt
+mutual
+  partial def expr_to_doc (e: Expr): Doc := 
+    match e with
+    | Expr.expr_neg f => "-" ++ expr_to_doc f
+    | Expr.expr_range2  a z => 
+        "[" ++ expr_to_doc a ++ ".." ++ expr_to_doc z
+    | Expr.expr_range3 a b z =>
+        "[" ++ expr_to_doc a ++ ", " ++ expr_to_doc b ++ ".." ++ expr_to_doc z 
+    | Expr.expr_bool b => if b then "true" else "false"
+    | Expr.expr_fn_call f xs =>
+        let doc_xs := intercalate_doc (List.map expr_to_doc xs) "," 
+        f ++ "(" ++  doc_xs ++ ")"
+    | Expr.expr_list_composition lhs rhs =>
+        lhs ++ "{" ++ expr_to_doc rhs ++ "}" -- TODO: vgroup?
+    | Expr.expr_var v => v
+    | Expr.expr_str s => "\"" ++ s ++ "\""
+    | Expr.expr_not x => "not(" ++ expr_to_doc x ++ ")"
+    | Expr.expr_binop x op y => 
+      expr_to_doc x ++ " " ++ doc op ++ " " ++ expr_to_doc y
+    | Expr.expr_index arr ix => 
+      expr_to_doc arr ++ "[" ++ expr_to_doc ix ++ "]"
+    | Expr.expr_list args => 
+      "[" ++ intercalate_doc (args.map expr_to_doc) "," ++ "]"
+    | Expr.expr_permutation cycles => 
+      let doc_cycles := 
+        cycles.map (fun c => "(" ++ intercalate_doc c ", " ++ ")")
+      String.join doc_cycles
 
+    | _ => "UNKNOWN"
+
+  -- | expr_permutation: List (List Int) -> Expr
+  -- -- | nested functions? x(
+  -- | expr_fn_defn: (params: List String) -> (is_vararg?: Bool) -> (locals: List String) ->
+  --       (body: List Stmt) -> Expr
+  partial def stmt_to_doc(s: Stmt): Doc := ""
+end
+
+instance : Pretty Expr where
+  doc := expr_to_doc 
+
+instance : Pretty Stmt where
+  doc := stmt_to_doc 
 
 def keywords : List String := 
   ["if", "else"
