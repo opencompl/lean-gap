@@ -170,7 +170,15 @@ mutual
    if not $ keywords.contains s then do
      pdebugfail $ "can only peek  keywords, |" ++ s ++ "| is not keyword."
    else psym! s -- TODO, HACK: this reuses symbol.
+  
+  partial def pvar!: P String := do
+    let x <- pident!
+    if keywords.contains x then do 
+    perror $ "expected variable, found keyword: |" ++ x ++ "|"
+    else return x
 
+
+    
   partial def parse_expr_logical (u: Unit): P Expr := do 
     let l <- parse_expr_compare u
     if (<- pkwd? "and") then do
@@ -241,7 +249,7 @@ mutual
       let n <- pnumber
       return Expr.expr_num n
     else if (<- pident?) then do
-           let ident <- pident!
+           let ident <- pvar!
            if (<- psym? "(") then do
              let args <- pintercalated '(' (parse_expr u) ',' ')'
              return Expr.expr_fn_call ident args
@@ -302,7 +310,7 @@ partial def parse_arith_add_sub_mod (u: Unit) : P Expr := do
          let r <- parse_expr u
          return Expr.expr_binop l binop_type.add r
     | some '-' => do
-         pconsume '/'
+         pconsume '-'
          let r <- parse_expr u
          return Expr.expr_binop l binop_type.sub r
     | some 'm' => do
@@ -357,12 +365,12 @@ partial def parse_fn_args (u: Unit) : P (List String × Bool) := do
                 psym! ")"
                 return ([], true)
             else do
-              let x <- pident!
+              let x <- pvar!
               -- | TODO: I want to ban all uses of por.
               -- let (xs, varargs?) <- por (p_rest_args u) (psuccess ([], false))
               let (xs, varargs?) <- (p_rest_args u)
               return (x::xs, varargs?)
-    let x <- pident!
+    let x <- pvar!
     let (xs, varargs?) <- (p_rest_args u)
     return (x::xs, varargs?)
    
@@ -385,6 +393,7 @@ partial def parse_fn_defn (u: Unit) : P Expr := do
   let locals <- parse_fn_locals u
   pnote $ ". parsing statements"
   let stmts <- parse_stmts (pkwd? "end") u
+  pkwd! "end"
   return Expr.expr_fn_defn params varargs? locals stmts
 
 
@@ -409,6 +418,7 @@ partial def parse_stmts (pstop?: P Bool) (u: Unit) : P (List Stmt) := do
 -- | parse the else clause of an if then else
  partial def pelse (u: Unit)  : P  ((List (Expr × List Stmt)) × Option (List Stmt)) := do
    if (<- pkwd? "elif") then do
+      pkwd! "elif"
       let cond <- parse_expr u
       pkwd! "then"
       let body <- parse_stmts p_is_fi_or_elif_or_else u
@@ -433,9 +443,7 @@ partial def parse_if (u: Unit) : P Stmt := do
   pkwd! "then"
   pnote $ "found if then. Now parsing body"
   let body <- parse_stmts p_is_fi_or_elif_or_else u
-  pdebugfail $ "found if body:" ++ vgroup (body.map doc)
   let (elifs, else_) <- pelse u
-  pkwd! "fi"
   psym! ";"
   return Stmt.stmt_if cond body elifs else_
 
