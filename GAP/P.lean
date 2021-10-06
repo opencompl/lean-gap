@@ -301,8 +301,6 @@ partial def ptakewhile (predicateWhile: Char -> Bool) : P String :=
 
 
 -- | take an identifier. TODO: ban symbols
-
-
 def pident! : P String := do
    eat_whitespace
    let mc <- ppeek

@@ -50,6 +50,7 @@ mutual
   | expr_var: String -> Expr
   | expr_str: String -> Expr
   | expr_not: Expr -> Expr
+  | expr_assign: (lhs: String) -> (rhs: Expr) -> Expr -- stbc.gi:33 return StabChainOp( G, rec( base := base ) );
   | expr_binop: Expr -> binop_type -> Expr -> Expr
   | expr_index: (arr: Expr) -> (ix: Expr) -> Expr
   | expr_list: (args: List Expr) -> Expr
@@ -92,6 +93,7 @@ mutual
     | Expr.expr_var v => v
     | Expr.expr_str s => "\"" ++ s ++ "\""
     | Expr.expr_not x => "not(" ++ expr_to_doc x ++ ")"
+    | Expr.expr_assign lhs rhs => doc lhs ++ " := " ++ expr_to_doc rhs
     | Expr.expr_binop x op y => 
       expr_to_doc x ++ " " ++ doc op ++ " " ++ expr_to_doc y
     | Expr.expr_index arr ix => 
@@ -247,15 +249,15 @@ mutual
        let s <- pstr
        return Expr.expr_str s
     else if (<- pkwd? "true") then  do
-           pkwd! "true"
-           return (Expr.expr_bool true)
+          pkwd! "true"
+          return (Expr.expr_bool true)
     else if (<- pkwd? "false") then do
-           pkwd! "false"
-           return (Expr.expr_bool false)
+          pkwd! "false"
+          return (Expr.expr_bool false)
     else if (<- pkwd? "not") then do
-           pkwd! "not"
-           let e <- parse_expr u
-           return Expr.expr_not e
+          pkwd! "not"
+          let e <- parse_expr u
+          return Expr.expr_not e
     else if (<- pkwd? "function") then 
       do parse_fn_defn u
     else if (<- psym? "[") then parse_list u
@@ -268,36 +270,43 @@ mutual
         let e <- parse_expr u
         if (<- psym? ")")
         then do psym! ")"; return e
-        else do -- must have a comma
-          parse_permutation_at_comma e u
+        else do parse_permutation_at_comma e u -- must have a comma
     else if (<- psym? "-") then do
-             psym! "-"
-             let e <- parse_expr u
-             return Expr.expr_neg e
+            psym! "-"
+            let e <- parse_expr u
+            return Expr.expr_neg e
     else if (<- p2peek? pnumber) then do
       let n <- pnumber
       return Expr.expr_num n
     else if (<- pident?) then do
-           let ident <- pvar!
-           -- lambda: <ident> -> <expr>
-           if (<- psym? "->") then do
+          let ident <- pvar!
+          -- lambda: <ident> -> <expr>
+          if (<- psym? "->") then do
             psym! "->"
             let rhs <- parse_expr u
             let vararg? := false
             let locals := []
             let body := [Stmt.stmt_return rhs]
             return Expr.expr_fn_defn [ident] vararg? locals body
-           -- fn call [this is JANKY]
-           else if (<- psym? "(") then do
+          -- fn call [this is JANKY]
+          else if (<- psym? "(") then do
              let args <- pintercalated '(' (parse_expr u) ',' ')'
              return Expr.expr_fn_call ident args
-           -- list composition [this is JANKY]
-           else if (<- psym? "{") then do 
-             psym! "{"
-             let f <- parse_expr u
-             psym! "}"
-             return Expr.expr_list_composition ident f
-           else return Expr.expr_var ident
+          -- list composition v{w} [this is JANKY]
+          else if (<- psym? "{") then do 
+            psym! "{"
+            let f <- parse_expr u
+            psym! "}"
+            return Expr.expr_list_composition ident f
+          -- assignment x := y [JANKY]
+          else if (<- psym? ":= ") then do
+            psym! ":="
+            let rhs <- parse_expr u
+            return Expr.expr_assign ident rhs
+          -- field accessor | x.y.z [JANKY]
+          else if (<- psym? ".") then do
+            parse_field_access ident
+          else return Expr.expr_var ident
     else
       let eof <- peof?
       pnote $ "unknown leaf. EOF? |" ++ (if eof then "true" else "false" ) ++ "|" 
@@ -491,18 +500,21 @@ partial def parse_if (u: Unit) : P Stmt := do
 partial def parse_assgn_or_procedure_call (u: Unit) : P Stmt := do
   --  let lhs <- pident! -- TODO: this seems like a hack to me.
   let lhs <- parse_expr u -- TODO: this seems like a hack to me.
-  if (<- psym? ":=") then do
-     psym! ":="
-     let rhs <- parse_expr u
-     psym! ";"
-    --  return Stmt.stmt_assign (Expr.expr_var lhs) rhs
-     return Stmt.stmt_assign  lhs rhs
-  else 
-    match lhs with 
-    | Expr.expr_fn_call fn args => do
-        psym! ";"
-        Stmt.stmt_procedure_call (Expr.expr_var fn) args
-    | _ => perror $ "only top level expressions allowed are calls and assignments. Found |" ++ doc lhs ++ "|"
+  -- if (<- psym? ":=") then do
+  --    psym! ":="
+  --    let rhs <- parse_expr u
+  --    psym! ";"
+  --   --  return Stmt.stmt_assign (Expr.expr_var lhs) rhs
+  --    return Stmt.stmt_assign  lhs rhs
+  -- else 
+  match lhs with 
+  | Expr.expr_fn_call fn args => do
+      psym! ";"
+      Stmt.stmt_procedure_call (Expr.expr_var fn) args
+  | Expr.expr_assign lhs rhs => do
+      psym! ";"
+      Stmt.stmt_assign (Expr.expr_var lhs) rhs
+  | _ => perror $ "only top level expressions allowed are calls and assignments. Found |" ++ doc lhs ++ "|"
 
   
 
