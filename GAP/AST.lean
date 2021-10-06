@@ -51,7 +51,7 @@ mutual
   | expr_binop: Expr -> binop_type -> Expr -> Expr
   | expr_index: (arr: Expr) -> (ix: Expr) -> Expr
   | expr_list: (args: List Expr) -> Expr
-  | expr_permutation: List (List Int) -> Expr
+  | expr_permutation: List (List Expr) -> Expr
   -- | nested functions? x(
   | expr_fn_defn: (params: List String) -> (is_vararg?: Bool) -> (locals: List String) ->
         (body: List Stmt) -> Expr
@@ -97,8 +97,8 @@ mutual
     | Expr.expr_list args => 
       "[" ++ intercalate_doc (args.map expr_to_doc) ", " ++ "]"
     | Expr.expr_permutation cycles => 
-      let doc_cycles := 
-        cycles.map (fun c => "(" ++ intercalate_doc c ", " ++ ")")
+      let doc_cycles :=  
+        cycles.map (fun c => "(" ++ intercalate_doc (c.map expr_to_doc) ", " ++ ")")
       String.join doc_cycles
     | Expr.expr_fn_defn args vararg? locals body =>
       let doc_args := intercalate_doc args ", "
@@ -148,7 +148,7 @@ def keywords : List String :=
    , "do", "od"
    , "for"
    , "true", "false"
-   , "and", "or", "not"
+   , "and", "or", "not", "mod"
    , "function", "return", "end"
    , "local"]
 
@@ -220,8 +220,24 @@ mutual
     parse_list_commas u
     -- por (parse_list_commas u) $ (parse_list_range2 u)
   
-  partial def parse_permutation (u: Unit): P Expr := 
-        perror "don't know how to parse permutation"
+  -- | parse the rest of the permutation given the first element.
+  -- The cursor is at the first comma:
+  -- (a , b , c)
+  --    ^
+  partial def parse_permutation (e: Expr) (u: Unit): P Expr := do
+    -- go := "," arg ")" | "," arg go   
+    psym! ","
+    let es <- pCommasUntil1 (parse_expr u) "," ")"
+    let cyc0 := e :: es -- first cycle
+
+    let rec other_cycles (u: Unit): P (List (List Expr)) := do 
+      if (<- psym? "(") then do 
+        let cyc <- pintercalated '(' (parse_expr u) ',' ')' 
+        let cycs <- other_cycles u
+        return cyc::cycs
+      else return []  
+    let cycs <- other_cycles u
+    return Expr.expr_permutation $ [cyc0] ++ cycs
 
   partial def parse_expr_leaf (u: Unit) : P Expr := do
     if (<- psym? "\"") then do
@@ -240,7 +256,15 @@ mutual
     else if (<- pkwd? "function") then 
       do parse_fn_defn u
     else if (<- psym? "[") then parse_list u
-    else if (<- psym? "(") then parse_permutation u
+    else if (<- psym? "(") then do 
+      -- either (expr) or (expr, expr, expr, ...) [for permutation]
+      psym! "("
+      let e <- parse_expr u
+      if (<- psym? ")")
+      then do psym! ")"; return e
+      else do -- must have a comma
+        psym! ","
+        parse_permutation e u
     else if (<- psym? "-") then do
              psym! "-"
              let e <- parse_expr u
@@ -250,7 +274,16 @@ mutual
       return Expr.expr_num n
     else if (<- pident?) then do
            let ident <- pvar!
-           if (<- psym? "(") then do
+           -- lambda: <ident> -> <expr>
+           if (<- psym? "->") then do
+            psym! "->"
+            let rhs <- parse_expr u
+            let vararg? := false
+            let locals := []
+            let body := [Stmt.stmt_return rhs]
+            return Expr.expr_fn_defn [ident] vararg? locals body
+           -- fn call
+           else if (<- psym? "(") then do
              let args <- pintercalated '(' (parse_expr u) ',' ')'
              return Expr.expr_fn_call ident args
            else return Expr.expr_var ident
@@ -378,7 +411,13 @@ partial def parse_fn_locals (u: Unit) : P (List String) := do
   if (<- pkwd? "local") 
   then do
     pkwd! "local"
-    let xs <- ppeekstar ',' pident!
+    let rec plocals (u: Unit) : P (List String) := do 
+        let x <- pident!
+        if (<- psym? ";") then return [x]
+        else do 
+          let xs <- plocals u
+          return x::xs
+    let xs <- plocals u
     psym! ";"
     return xs
   else return []

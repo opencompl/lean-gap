@@ -336,25 +336,20 @@ def pnumber : P Int := do
       | none => perror $ "expected number, found |" ++ name ++ "|."
   | none => perror $ "expected number, found EOF"
   
--- | pstar p delim is either (i) a `delim` or (ii) a  `p` followed by (pmany p delim)
-partial def pstarUntil (p: P a) (d: Char) : P (List a) := do
-   eat_whitespace
-   if (<- ppeek? d)
-   then do 
-     pconsume d
-     return []
-   else do
-       let a <- p
-       let as <- pstarUntil p d
-       return (a::as)
+-- | pCommasUntil1 p comma until is <a> [<until> | <comma> <pCommasUntil1>] 
+-- <p> <comma> follwed by pCommasUntil
 
-
--- | pdelimited l p r is an l, followed by as many ps, followed by r.
-partial def pdelimited (l: Char) (p: P a) (r: Char) : P (List a) := do
-  pconsume l
-  pstarUntil p r
-
-
+partial def pCommasUntil1 (p: P a) (comma: String) (until: String) : P (List a) := do
+  let a <- p
+  if (<- psym? comma) then do
+    psym! comma
+    let as <- pCommasUntil1 p comma until 
+    return a::as
+  else if (<- psym? until) then do
+    psym! until
+    return [a]
+  else perror $ "expected |" ++ comma ++ "| or |" ++ until ++ "|."
+    
 -- parse an [ <r> | <i> <p> <pintercalated_> ]
 partial def pintercalated_ (p: P a) (i: Char) (r: Char) : P (List a) := do
   eat_whitespace
