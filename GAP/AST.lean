@@ -103,16 +103,16 @@ mutual
   partial  def parse_list_range2 (u: Unit) : P Expr := do
     pconsume '['
     let first <- parse_expr u
-    pconsume_symbol ".."
+    psym! ".."
     let last <- parse_expr u
     return Expr.expr_range2 first last
 
   partial  def parse_list_range3 (u: Unit) : P Expr := do
     pconsume '['
     let first <- parse_expr u
-    pconsume_symbol ","
+    psym! ","
     let snd <- parse_expr u
-    pconsume_symbol ".."
+    psym! ".."
     let last <- parse_expr u
     return Expr.expr_range3 first snd last
   
@@ -138,16 +138,16 @@ mutual
        match (<- ppeek_ident) with
        | some ident => do 
            let fn <- pconsume_ident ident
-           if (<- ppeek_symbol? "(") then do
+           if (<- psym? "(") then do
              let args <- pintercalated '(' (parse_expr u) ',' ')'
              return Expr.expr_fn_call ident args
            else return Expr.expr_var ident
        | none => 
-          if (<- ppeek_symbol? "[") then parse_list u
+          if (<- psym? "[") then parse_list u
           else if (<- pkwd? "function") then parse_fn_defn u
-          else if (<- ppeek_symbol? "(") then parse_permutation u
-          else if (<- ppeek_symbol? "-") then do
-             pconsume_symbol "-"
+          else if (<- psym? "(") then parse_permutation u
+          else if (<- psym? "-") then do
+             psym! "-"
              let e <- parse_expr u
              return Expr.expr_neg e
           else do
@@ -219,20 +219,20 @@ partial def parse_arith_add_sub_mod (u: Unit) : P Expr := do
 -- TODO: write a higher order function that generates this.
 partial def parse_expr_compare (u: Unit) : P Expr := do
   let l <- parse_arith_add_sub_mod u
-  if (<- ppeek_symbol? "=") then do
-         pconsume_symbol "="
+  if (<- psym? "=") then do
+         psym! "="
          let r <- parse_expr u
          return Expr.expr_binop l binop_type.eq r
-  else if (<- ppeek_symbol? "<>") then do
-         pconsume_symbol "<>"
+  else if (<- psym? "<>") then do
+         psym! "<>"
          let r <- parse_expr u
          return Expr.expr_binop l binop_type.neq r
-  else if (<- ppeek_symbol? "<") then do
-         pconsume_symbol "<"
+  else if (<- psym? "<") then do
+         psym! "<"
          let r <- parse_expr u
          return Expr.expr_binop l binop_type.lt r
-  else if (<- ppeek_symbol? ">") then do
-         pconsume_symbol ">"
+  else if (<- psym? ">") then do
+         psym! ">"
          let r <- parse_expr u
          return Expr.expr_binop l binop_type.gt r
   else return l
@@ -244,18 +244,18 @@ partial def parse_var : P String := do
 
 --  | returns true/false based on whether varargs or not
 partial def parse_fn_args (u: Unit) : P (List String × Bool) := do
-  pconsume_symbol "("
-  if (<- ppeek_symbol? ")")
+  psym! "("
+  if (<- psym? ")")
   then (return [], false)
   else do
     -- <rest_args> = ", <arg>  [<rest_args> | ")"]
     -- | TODO: consider using ppeekstar!
     let rec p_rest_args (u: Unit): P (List String × Bool) := do
           pconsume ','
-          if (<- ppeek_symbol? "...") 
+          if (<- psym? "...") 
           then do
-              pconsume_symbol "..."
-              pconsume_symbol ")"
+              psym! "..."
+              psym! ")"
               return ([], true)
           else do
             let x <- parse_var
@@ -270,7 +270,7 @@ partial def parse_fn_locals (u: Unit) : P (List String) := do
   then do
     pkwd! "local"
     let xs <- ppeekstar ',' pident
-    pconsume_symbol ";"
+    psym! ";"
     return xs
   else return []
     
@@ -334,11 +334,11 @@ partial def parse_if (u: Unit) : P Stmt := do
 
 partial def parse_assgn_or_procedure_call (u: Unit) : P Stmt := do
    let lhs <- parse_expr u
-   if (<- ppeek_symbol? "(") then do
+   if (<- psym? "(") then do
      let args <- pintercalated '(' (parse_expr u) ',' ')'
      return Stmt.stmt_procedure_call lhs args
-   else if (<- ppeek_symbol? ":=") then do
-     pconsume_symbol ":="
+   else if (<- psym? ":=") then do
+     psym! ":="
      let rhs <- parse_expr u
      return Stmt.stmt_assign lhs rhs
    else perror "expected assignment with := or function call with (...) at toplevel"

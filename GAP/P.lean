@@ -192,7 +192,7 @@ def ppeek : P (Option Char) := {
      (loc, ns, haystack, Result.ok ∘ some ∘ front $ haystack)
   }
 
-partial def ppeek_symbol? (sym: String): P Bool :=  {
+partial def psym? (sym: String): P Bool :=  {
   runP := λ loc notes s => 
      let (loc, s) := eat_whitespace_ loc s
      return (loc, notes, s, Result.ok (isPrefixOf sym s))
@@ -203,8 +203,8 @@ private def padvance_str_INTERNAL (s: String) : P Unit := {
 }
 
 
-partial def pconsume_symbol (s: String): P Unit := do
-  match (<- ppeek_symbol? s) with
+partial def psym! (s: String): P Unit := do
+  match (<- psym? s) with
   | true => 
      padvance_str_INTERNAL s
      psuccess ()
