@@ -59,8 +59,13 @@ instance : Coe (List Stmt) Block where
  -- abbrev Block := List Stmt
 
 
-def keywords : List String := ["if", "else", "do", "od", "for", "true", "false", "not",
-                               "function"]
+def keywords : List String := 
+  ["if", "else"
+   , "do", "od"
+   , "for"
+   , "true", "false"
+   , "and", "or", "not"
+   , "function"]
 
 mutual
 
@@ -125,8 +130,10 @@ mutual
         perror "don't know how to parse permutation"
 
   partial def parse_expr_leaf (u: Unit) : P Expr := do
-    pdebugfail $ "parsing leaf"
-    if (<- pkwd? "true") then  do
+    if (<- psym? "\"") then do
+       let s <- pstr
+       return Expr.expr_str s
+    else if (<- pkwd? "true") then  do
            pkwd! "true"
            return (Expr.expr_bool true)
     else if (<- pkwd? "false") then do
@@ -138,7 +145,6 @@ mutual
            return Expr.expr_not e
     else if (<- pident?) then do
            let ident <- pident!
-           pdebugfail $ "found potential function: |" ++ ident ++ "|"
            if (<- psym? "(") then do
              let args <- pintercalated '(' (parse_expr u) ',' ')'
              return Expr.expr_fn_call ident args
@@ -328,15 +334,14 @@ partial def parse_if (u: Unit) : P Stmt := do
 
 
 partial def parse_assgn_or_procedure_call (u: Unit) : P Stmt := do
-   let lhs <- parse_expr u
-   pdebugfail $ "parsing assignment. LHS: "
+   let lhs <- pident! -- TODO: this seems like a hack to mex
    if (<- psym? "(") then do
      let args <- pintercalated '(' (parse_expr u) ',' ')'
-     return Stmt.stmt_procedure_call lhs args
+     return Stmt.stmt_procedure_call (Expr.expr_var lhs) args
    else if (<- psym? ":=") then do
      psym! ":="
      let rhs <- parse_expr u
-     return Stmt.stmt_assign lhs rhs
+     return Stmt.stmt_assign (Expr.expr_var lhs) rhs
    else perror "expected assignment with := or function call with (...) at toplevel"
 
   
@@ -351,9 +356,9 @@ partial def parse_for(u: Unit): P Stmt := do
   return Stmt.stmt_for var e body
 
   partial def parse_stmt (u: Unit) : P Stmt := do
-  if (<- pkwd? "if") then parse_if u
-  else if (<- pkwd? "for") then parse_for u
-  else parse_assgn_or_procedure_call u
+  if (<- pkwd? "if") then parse_if u <* psym! ";"
+  else if (<- pkwd? "for") then parse_for u <* psym! ";"
+  else parse_assgn_or_procedure_call u <* psym! ";"
 
 
   -- | note to self: these give *worse* error messages!
