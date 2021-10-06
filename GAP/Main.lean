@@ -30,7 +30,7 @@ def main (xs: List String): IO Unit := do
   match res with
    | Result.ok op => do
      IO.println   "***Parse succeeded:***"
-     -- IO.println op
+     IO.println $ vgroup $ op.map Pretty.doc
    | Result.err err => do
       IO.eprintln "***Parse Error:***"
       IO.eprintln (note_add_file_content contents err)

@@ -108,7 +108,30 @@ mutual
       vgroup ["function (" ++ doc_args ++ doc_vararg ++ ")",
               nest_vgroup $ [doc_locals] ++ (body.map stmt_to_doc)]
 
-  partial def stmt_to_doc(s: Stmt): Doc := ""
+  partial def stmt_to_doc(s: Stmt): Doc := 
+    match s with
+    | Stmt.stmt_assign lhs rhs =>
+      expr_to_doc lhs ++ " := " ++ expr_to_doc rhs
+    | Stmt.stmt_procedure_call fn args => 
+        let doc_args := intercalate_doc (args.map expr_to_doc) ","
+        expr_to_doc fn ++ "(" ++ doc_args ++ ")"
+    | Stmt.stmt_if cond then_ elifs else_ =>
+      let docs_if : List Doc := 
+        ["if " ++ expr_to_doc cond ++ " then", nest_vgroup $ then_.map stmt_to_doc] 
+      let docs_elifs : List Doc :=
+        List.join ∘ elifs.map $
+          (fun (cond, body) => 
+            ["elif " ++ expr_to_doc cond,
+             nest_vgroup $ body.map stmt_to_doc]) 
+      let docs_else : List Doc := 
+        match else_ with 
+        | some else_ => ["else", nest_vgroup $ else_.map stmt_to_doc]
+        | none => []      
+      vgroup $  docs_if ++ docs_elifs ++ docs_else
+    | Stmt.stmt_return e => "return " ++ expr_to_doc e
+    | Stmt.stmt_for lhs rhs body =>
+        vgroup ["for" ++ lhs ++ " in " ++ expr_to_doc rhs,
+                nest_vgroup $ body.map stmt_to_doc] 
 end
 
 instance : Pretty Expr where
