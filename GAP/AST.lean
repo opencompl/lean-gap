@@ -3,7 +3,8 @@ import GAP.Doc
 
 -- | no non-determinism for us!
 -- | TODO: hide ppeek as well. Rely only on |psym?|
-open GAP.P hiding por pmany0 pmany1
+-- | TODO: consider hiding `por` as well? We use it now to parse lists.
+open GAP.P hiding  pmany0 pmany1
 open GAP.Doc
 open GAP.Doc.Pretty
 namespace GAP.AST
@@ -198,10 +199,11 @@ mutual
     return  (Expr.expr_list args)
 
   partial  def parse_list_range2 (u: Unit) : P Expr := do
-    pconsume '['
+    psym! "["
     let first <- parse_expr u
     psym! ".."
     let last <- parse_expr u
+    psym! "]"
     return Expr.expr_range2 first last
 
   partial  def parse_list_range3 (u: Unit) : P Expr := do
@@ -211,6 +213,7 @@ mutual
     let snd <- parse_expr u
     psym! ".."
     let last <- parse_expr u
+    psym! "]"
     return Expr.expr_range3 first snd last
   
  -- | TODO: refactor for better errors!
@@ -218,8 +221,8 @@ mutual
 -- https://www.gap-system.org/Manuals/doc/ref/chap21.html#X79596BDE7CAF8491
   partial def parse_list (u: Unit) : P Expr := do 
     pnote $ "parsing list"
-    parse_list_commas u
-    -- por (parse_list_commas u) $ (parse_list_range2 u)
+    -- parse_list_commas u
+    por (parse_list_range2 u) $ (parse_list_commas u)
   
   -- | parse the rest of the permutation given the first element.
   -- The cursor is at the first comma:
@@ -286,10 +289,16 @@ mutual
             let locals := []
             let body := [Stmt.stmt_return rhs]
             return Expr.expr_fn_defn [ident] vararg? locals body
-           -- fn call
+           -- fn call [this is JANKY]
            else if (<- psym? "(") then do
              let args <- pintercalated '(' (parse_expr u) ',' ')'
              return Expr.expr_fn_call ident args
+           -- list composition [this is JANKY]
+           else if (<- psym? "{") then do 
+             psym! "{"
+             let f <- parse_expr u
+             psym! "}"
+             return Expr.expr_list_composition ident f
            else return Expr.expr_var ident
     else
       let eof <- peof?
