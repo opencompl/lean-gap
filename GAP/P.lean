@@ -212,7 +212,9 @@ def ppeek : P (Option Char) := {
 
 -- | return true if EOF
 def peof? : P Bool := {
-  runP := λ loc ns haystack => (loc, ns, haystack, Result.ok (isEmpty haystack))
+  runP := λ loc ns haystack => 
+     let (loc, haystack) := eat_whitespace_ loc haystack
+    (loc, ns, haystack, Result.ok (isEmpty haystack))
 }
 
 partial def psym? (sym: String): P Bool :=  {
@@ -337,7 +339,7 @@ def pnumber : P Int := do
   | none => perror $ "expected number, found EOF"
   
 -- | pCommasUntil1 p comma until is <a> [<until> | <comma> <pCommasUntil1>] 
--- <p> <comma> follwed by pCommasUntil
+-- <p> <comma> follwed by pCommasUntil. This also consumes the until.
 
 partial def pCommasUntil1 (p: P a) (comma: String) (until: String) : P (List a) := do
   let a <- p
@@ -349,7 +351,7 @@ partial def pCommasUntil1 (p: P a) (comma: String) (until: String) : P (List a) 
     psym! until
     return [a]
   else perror $ "expected |" ++ comma ++ "| or |" ++ until ++ "|."
-    
+
 -- parse an [ <r> | <i> <p> <pintercalated_> ]
 partial def pintercalated_ (p: P a) (i: Char) (r: Char) : P (List a) := do
   eat_whitespace

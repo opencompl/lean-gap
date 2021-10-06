@@ -103,14 +103,15 @@ mutual
       String.join doc_cycles
     | Expr.expr_fn_defn args vararg? locals body =>
       let doc_args := intercalate_doc args ", "
-      let doc_vararg := (if args.isEmpty then "" else ", ") ++ 
-                        (if vararg? then "..." else ".")
+      let doc_vararg := (if (!args.isEmpty) && vararg? then "," else "") ++ 
+                        (if vararg? then "..." else "")
       let doc_locals : Doc := 
         if locals.isEmpty then "" 
         else "local " ++ intercalate_doc locals ", "
     
       vgroup ["function (" ++ doc_args ++ doc_vararg ++ ")",
-              nest_vgroup $ [doc_locals] ++ (body.map stmt_to_doc)]
+              nest_vgroup $ [doc_locals] ++ (body.map stmt_to_doc),
+              "end"]
 
   partial def stmt_to_doc(s: Stmt): Doc := 
     match s with
@@ -147,7 +148,7 @@ instance : Pretty Stmt where
 def keywords : List String := 
   ["if", "then", "elif", "else", "fi"
    , "do", "od"
-   , "for"
+   , "for", "in"
    , "true", "false"
    , "and", "or", "not", "mod"
    , "function", "return", "end"
@@ -164,12 +165,12 @@ mutual
   -- | TODO: rewrite using low level API?
   partial def pkwd? (s: String): P Bool := do
    if not $ keywords.contains s then do
-     pdebugfail $ "can only peek  keywords, |" ++ s ++ "| is not keyword."
+     pdebugfail $ "can only peek  keywords, |" ++ s ++ "| is not keyword"
    else psym? s -- TODO, HACK: this reuses symbol. 
 
   partial def pkwd! (s: String) : P Unit := do
    if not $ keywords.contains s then do
-     pdebugfail $ "can only peek  keywords, |" ++ s ++ "| is not keyword."
+     pdebugfail $ "can only peek  keywords, |" ++ s ++ "| is not keyword"
    else psym! s -- TODO, HACK: this reuses symbol.
   
   partial def pvar!: P String := do
@@ -289,7 +290,8 @@ mutual
              return Expr.expr_fn_call ident args
            else return Expr.expr_var ident
     else
-      pnote $ "unknown leaf" 
+      let eof <- peof?
+      pnote $ "unknown leaf. EOF? |" ++ (if eof then "true" else "false" ) ++ "|" 
       perror "unknown leaf expression"
            
     
@@ -392,13 +394,13 @@ partial def parse_fn_args (u: Unit) : P (List String × Bool) := do
             psym! ")"
             return ([], false)
           else do
-            pconsume ','
             if (<- psym? "...") 
             then do
                 psym! "..."
                 psym! ")"
                 return ([], true)
             else do
+              pconsume ','
               let x <- pvar!
               -- | TODO: I want to ban all uses of por.
               -- let (xs, varargs?) <- por (p_rest_args u) (psuccess ([], false))
@@ -412,14 +414,7 @@ partial def parse_fn_locals (u: Unit) : P (List String) := do
   if (<- pkwd? "local") 
   then do
     pkwd! "local"
-    let rec plocals (u: Unit) : P (List String) := do 
-        let x <- pident!
-        if (<- psym? ";") then return [x]
-        else do 
-          let xs <- plocals u
-          return x::xs
-    let xs <- plocals u
-    psym! ";"
+    let xs <- pCommasUntil1 pvar! "," ";"
     return xs
   else return []
     
@@ -488,18 +483,24 @@ partial def parse_if (u: Unit) : P Stmt := do
   return Stmt.stmt_if cond body elifs else_
 
 
+-- partial def parse_lval (u: Unit) : P Stmt := do 
+--   let var <- pident!
+
 partial def parse_assgn_or_procedure_call (u: Unit) : P Stmt := do
-   let lhs <- pident! -- TODO: this seems like a hack to mex
-   if (<- psym? "(") then do
-     let args <- pintercalated '(' (parse_expr u) ',' ')'
-     psym! ";"
-     return Stmt.stmt_procedure_call (Expr.expr_var lhs) args
-   else if (<- psym? ":=") then do
+  --  let lhs <- pident! -- TODO: this seems like a hack to me.
+  let lhs <- parse_expr u -- TODO: this seems like a hack to me.
+  if (<- psym? ":=") then do
      psym! ":="
      let rhs <- parse_expr u
      psym! ";"
-     return Stmt.stmt_assign (Expr.expr_var lhs) rhs
-   else perror "expected assignment with := or function call with (...) at toplevel"
+    --  return Stmt.stmt_assign (Expr.expr_var lhs) rhs
+     return Stmt.stmt_assign  lhs rhs
+  else 
+    match lhs with 
+    | Expr.expr_fn_call fn args => do
+        psym! ";"
+        Stmt.stmt_procedure_call (Expr.expr_var fn) args
+    | _ => perror $ "only top level expressions allowed are calls and assignments. Found |" ++ doc lhs ++ "|"
 
   
 
@@ -510,6 +511,7 @@ partial def parse_for(u: Unit): P Stmt := do
   let e <- parse_expr u
   pkwd! "do"
   let body <- parse_stmts (pkwd? "od") u
+  psym! "od"
   psym! ";"
   return Stmt.stmt_for var e body
 
