@@ -106,21 +106,47 @@ instance : Monad P := {
   bind := pbind
 }
 
+-- | eat till '\n'
+partial def eat_line_ (l: Loc) (s: String): Loc × String :=
+  if isEmpty s then (l, s)
+  else let c := front s
+  if c == '\n'
+  then (l, s)
+  else return eat_line_ (advance1 l c) (s.drop 1)
+
+partial def eat_whitespace_ (l: Loc) (s: String) : Loc × String :=
+    if isEmpty s
+    then (l, s)
+    else  
+     let c:= front s
+     -- if isPrefixOf "//" s
+     if c == '#'
+     then 
+      let (l, s) := eat_line_ l s
+      eat_whitespace_ l s
+     else if c == ' ' || c == '\t'  || c == '\n'
+       then eat_whitespace_ (advance1 l c) (s.drop 1)
+       else (l, s)
+
+
 
 def pnote [Pretty α] (a: α): P Unit := {
   runP := λ loc ns s => 
+   let (loc, s) := eat_whitespace_ loc s
     let n := { left := loc, right := loc, kind := doc a }
     (loc, ns ++ [n], s, Result.ok ())
 }
 
 def perror [Pretty e] (err: e) :  P a := {
   runP := λ loc ns s =>
-     (loc, ns, s, Result.err ({ left := loc, right := loc, kind := doc err}))
+  let (loc, s) := eat_whitespace_ loc s
+  (loc, ns, s, Result.err ({ left := loc, right := loc, kind := doc err}))
 }
 
 def pdebugfail [Pretty e] (err: e) :  P a := {
   runP := λ loc ns s =>
-     (loc, ns, s, Result.debugfail ({ left := loc, right := loc, kind := doc err}))
+    let (loc, s) := eat_whitespace_ loc s
+    (loc, ns, s, Result.debugfail ({ left := loc, right := loc, kind := doc err}))
 }
 
 
@@ -173,28 +199,6 @@ def por (p: P a) (q: P a) : P a :=  {
 --  | (p::ps) por p (pors ps)
 
 
--- | eat till '\n'
-partial def eat_line_ (l: Loc) (s: String): Loc × String :=
-  if isEmpty s then (l, s)
-  else let c := front s
-  if c == '\n'
-  then (l, s)
-  else return eat_line_ (advance1 l c) (s.drop 1)
-
-partial def eat_whitespace_ (l: Loc) (s: String) : Loc × String :=
-    if isEmpty s
-    then (l, s)
-    else  
-     let c:= front s
-     -- if isPrefixOf "//" s
-     if c == '#'
-     then 
-      let (l, s) := eat_line_ l s
-      eat_whitespace_ l s
-     else if c == ' ' || c == '\t'  || c == '\n'
-       then eat_whitespace_ (advance1 l c) (s.drop 1)
-       else (l, s)
-
 
 -- | never fails.
 def ppeek : P (Option Char) := { 
@@ -205,6 +209,11 @@ def ppeek : P (Option Char) := {
      let (loc, haystack) := eat_whitespace_ loc haystack
      (loc, ns, haystack, Result.ok ∘ some ∘ front $ haystack)
   }
+
+-- | return true if EOF
+def peof? : P Bool := {
+  runP := λ loc ns haystack => (loc, ns, haystack, Result.ok (isEmpty haystack))
+}
 
 partial def psym? (sym: String): P Bool :=  {
   runP := λ loc notes s => 
@@ -316,11 +325,17 @@ def pident! : P String := do
 
 def pnumber : P Int := do
   eat_whitespace
-  let name <- ptakewhile (fun c => c.isDigit)
-  match name.toInt? with
-   | some num => return num
-   | none => perror $ "expected number, found |" ++ name ++ "|."
-
+  match (<- ppeek) with
+  | some leading =>
+    if not leading.isDigit
+    then perror $ "expected number, found |" ++ doc leading ++ "|"
+    else 
+      let name <- ptakewhile (fun c => c.isDigit)
+      match name.toInt? with
+      | some num => return num
+      | none => perror $ "expected number, found |" ++ name ++ "|."
+  | none => perror $ "expected number, found EOF"
+  
 -- | pstar p delim is either (i) a `delim` or (ii) a  `p` followed by (pmany p delim)
 partial def pstarUntil (p: P a) (d: Char) : P (List a) := do
    eat_whitespace
@@ -359,7 +374,7 @@ partial def pintercalated_ (p: P a) (i: Char) (r: Char) : P (List a) := do
 
 
 -- | parse things starting with a <l>, followed by <p> intercalated by <i>, ending with <r>
-partial def pintercalated (l: Char) (p: P a) (i: Char) (r: Char) : P (List a) := do
+partial def pintercalated [Pretty a] (l: Char) (p: P a) (i: Char) (r: Char) : P (List a) := do
   eat_whitespace
   pconsume l
   match (<- ppeek) with

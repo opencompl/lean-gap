@@ -143,12 +143,12 @@ instance : Pretty Stmt where
   doc := stmt_to_doc 
 
 def keywords : List String := 
-  ["if", "else"
+  ["if", "then", "elif", "else", "fi"
    , "do", "od"
    , "for"
    , "true", "false"
    , "and", "or", "not"
-   , "function"
+   , "function", "return", "end"
    , "local"]
 
 mutual
@@ -183,6 +183,7 @@ mutual
     else  return l
 
   partial def parse_list_commas (u: Unit) : P Expr := do
+    pnote $ "parsing list with commas"
     let args <- pintercalated '[' (parse_expr u) ',' ']'
     return  (Expr.expr_list args)
 
@@ -203,8 +204,12 @@ mutual
     return Expr.expr_range3 first snd last
   
  -- | TODO: refactor for better errors!
+-- 21. ranges
+-- https://www.gap-system.org/Manuals/doc/ref/chap21.html#X79596BDE7CAF8491
   partial def parse_list (u: Unit) : P Expr := do 
-    por (parse_list_commas u) $ (parse_list_range2 u)
+    pnote $ "parsing list"
+    parse_list_commas u
+    -- por (parse_list_commas u) $ (parse_list_range2 u)
   
   partial def parse_permutation (u: Unit): P Expr := 
         perror "don't know how to parse permutation"
@@ -240,7 +245,9 @@ mutual
              let args <- pintercalated '(' (parse_expr u) ',' ')'
              return Expr.expr_fn_call ident args
            else return Expr.expr_var ident
-    else perror "unknown leaf expression"
+    else
+      pnote $ "unknown leaf" 
+      perror "unknown leaf expression"
            
     
   partial def parse_expr_index (u: Unit) : P Expr := do
@@ -350,12 +357,11 @@ partial def parse_fn_args (u: Unit) : P (List String × Bool) := do
                 return ([], true)
             else do
               let x <- pident!
+              -- | TODO: I want to ban all uses of por.
               let (xs, varargs?) <- por (p_rest_args u) (psuccess ([], false))
               return (x::xs, varargs?)
     let x <- pident!
-    pnote $ "parsed first arg"
     let (xs, varargs?) <- (p_rest_args u)
-    pnote $ "parsed rest arg"
     return (x::xs, varargs?)
    
 partial def parse_fn_locals (u: Unit) : P (List String) := do
@@ -376,7 +382,7 @@ partial def parse_fn_defn (u: Unit) : P Expr := do
   pnote $ "parsing function locals..."
   let locals <- parse_fn_locals u
   pnote $ ". parsing statements"
-  let stmts <- pmany0 (parse_stmt u)
+  let stmts <- parse_stmts (pkwd? "end") u
   return Expr.expr_fn_defn params varargs? locals stmts
 
 
@@ -391,24 +397,21 @@ partial def parse_stmts (pstop?: P Bool) (u: Unit) : P (List Stmt) := do
         let ss <- parse_stmts pstop? u
         return (s::ss)
 
-partial def whileM [Monad m] (cond: m Bool) (body: m a): m (List a) := do 
-   if (<- cond)
-   then do let a <- body; let as <- whileM cond body; return (a::as)
-   else return []
 
-
-
- partial def p_is_fi_or_elif_or_else : P Bool :=
-     por (pkwd? "fi") (por (pkwd? "elif") (pkwd? "else"))
+ partial def p_is_fi_or_elif_or_else : P Bool := do
+    if (<- pkwd? "fi") then true
+    else if (<- pkwd? "elif") then true
+    else if (<- pkwd? "else") then true
+    else false
 
 -- | parse the else clause of an if then else
  partial def pelse (u: Unit)  : P  ((List (Expr × List Stmt)) × Option (List Stmt)) := do
    if (<- pkwd? "elif") then do
-             let cond <- parse_expr u
-             pkwd! "then"
-             let body <- parse_stmts p_is_fi_or_elif_or_else u
-             let (elifs, else_) <- pelse u
-             return ((cond,body)::elifs, else_)
+      let cond <- parse_expr u
+      pkwd! "then"
+      let body <- parse_stmts p_is_fi_or_elif_or_else u
+      let (elifs, else_) <- pelse u
+      return ((cond,body)::elifs, else_)
    else if (<- pkwd? "else") then do
           pkwd! "else"
           let stmts <- parse_stmts (pkwd? "fi") u
@@ -424,9 +427,13 @@ partial def parse_if (u: Unit) : P Stmt := do
   pkwd! "if"
   pnote $ "parsing if"
   let cond <- parse_expr u
+  pnote $ "found if condition: |" ++ doc cond ++ "|"
   pkwd! "then"
+  pnote $ "found if then. Now parsing body"
   let body <- parse_stmts p_is_fi_or_elif_or_else u
+  pdebugfail $ "found if body:" ++ vgroup (body.map doc)
   let (elifs, else_) <- pelse u
+  pkwd! "fi"
   psym! ";"
   return Stmt.stmt_if cond body elifs else_
 
@@ -459,6 +466,12 @@ partial def parse_for(u: Unit): P Stmt := do
   partial def parse_stmt (u: Unit) : P Stmt := do
   if (<- pkwd? "if") then parse_if u
   else if (<- pkwd? "for") then parse_for u
+  else if (<- pkwd? "return") then do
+    pkwd! "return"
+    let e <- parse_expr u
+    pnote $ "found return expr |" ++ doc e ++ "|"
+    psym! ";"
+    return Stmt.stmt_return e
   else parse_assgn_or_procedure_call u
 
 
@@ -468,6 +481,6 @@ partial def parse_for(u: Unit): P Stmt := do
   end
 
 partial def parse_toplevel (u: Unit): P (List Stmt) :=
-  pmany1 (parse_stmt u)
+  parse_stmts peof? u
 
 
