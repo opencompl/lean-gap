@@ -2,6 +2,7 @@ import GAP.P
 import GAP.Doc
 
 -- | no non-determinism for us!
+-- | TODO: hide ppeek as well. Rely only on |psym?|
 open GAP.P hiding por pmany0 pmany1
 open GAP.Doc
 open GAP.Doc.Pretty
@@ -347,11 +348,11 @@ partial def parse_arith_add_sub_mod (u: Unit) : P Expr := do
          let r <- parse_expr u
          return Expr.expr_binop l binop_type.sub r
     | some 'm' => do
-           match (<- pkwd? "mod") with
-              | true => do
-                  let r <- parse_expr u
-                  return Expr.expr_binop l binop_type.mod r
-              | false => return l
+           if (<- pkwd? "mod")then do
+                pkwd! "mod"
+                let r <- parse_expr u
+                return Expr.expr_binop l binop_type.mod r
+            else return l
     | _ => return l
 
 -- TODO: write a higher order function that generates this.
