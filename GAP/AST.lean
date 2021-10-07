@@ -299,7 +299,7 @@ mutual
             psym! "}"
             return Expr.expr_list_composition ident f
           -- assignment x := y [JANKY]
-          else if (<- psym? ":= ") then do
+          else if (<- psym? ":=") then do
             psym! ":="
             let rhs <- parse_expr u
             return Expr.expr_assign ident rhs
@@ -530,6 +530,7 @@ partial def parse_for(u: Unit): P Stmt := do
   return Stmt.stmt_for var e body
 
   partial def parse_stmt (u: Unit) : P Stmt := do
+
   if (<- pkwd? "if") then parse_if u
   else if (<- pkwd? "for") then parse_for u
   else if (<- pkwd? "return") then do
