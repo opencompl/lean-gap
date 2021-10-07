@@ -304,8 +304,8 @@ mutual
             let rhs <- parse_expr u
             return Expr.expr_assign ident rhs
           -- field accessor | x.y.z [JANKY]
-          else if (<- psym? ".") then do
-            parse_field_access ident
+          -- else if (<- psym? ".") then do
+          --   parse_field_access ident
           else return Expr.expr_var ident
     else
       let eof <- peof?
