@@ -17,7 +17,8 @@ open System
 -- https://github.com/leanprover/lean4/blob/master/tests/playground/file.lean
 def main (xs: List String): IO Unit := do
   match xs with
-  | [] =>  Group.tests -- run tests.
+  | [] =>  
+      let _ <- Group.tests; return () -- run tests.
   | _ => do
     -- let path : System.FilePath :=  xs.head!
     let path :=  xs.head!

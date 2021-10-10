@@ -60,10 +60,35 @@ instance : Monad Generator where
 def genTuple (ga: Generator α)  (gb: Generator β)  : Generator (α × β) := 
   fun i => (ga i, gb i) -- bad, always correlated!
   
+inductive TestResult
+| success
+| failure
+
+
 
 -- | return some () on success.
-def testRandom (gen: Generator a) (predicate: a -> OptionM Unit): IO (OptionM Unit) := do
-   return (predicate (gen 1))
+def testRandom [ToString α] (gen: Generator α) (predicate: α -> TestResult): IO TestResult := do
+   let total := 120
+   let rec go (n: Nat) : IO TestResult := 
+     match n with
+     | 0 => return TestResult.success
+     | Nat.succ n' => do 
+           let a := gen n
+           match predicate (gen n) with
+           | TestResult.success => do
+                 IO.eprint $ "\rsucceeded test [" ++ toString (total - n + 1) ++ "/" ++ toString total ++ "]"
+                 go n' 
+           | TestResult.failure => do
+              IO.eprintln $ "failed at counter-example(seed= " ++ toString n ++ "): " ++ toString a
+              return TestResult.failure
+
+   IO.eprintln "\n---"
+   IO.eprint $ "running tests... [0/" ++ toString total ++ "]"
+   let out <- go total
+   match out with
+   | TestResult.success => IO.eprintln "\nPassed all tests"
+   | TestResult.failure => IO.eprintln "\nFailed test"
+   return out
 
 def testExhaustive (gen: Generator a) (predicate: a -> OptionM Unit) (depth: Int): IO Bool := do
    return true
