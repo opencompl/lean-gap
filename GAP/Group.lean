@@ -184,10 +184,14 @@ def schrier_decomposition(gs:  GeneratingSet) : List (GeneratingSet) :=
 def permutation_generator : Generator Permutation :=
   fun i => Permutation.identity
 
-def test_permutation_group_inverse(p: Permutation) : IO (OptionM Unit) :=
+def test_permutation_group_inverse: IO (OptionM Unit) :=
     testRandom permutation_generator $ fun p => do
       guard $ (mul p (inverse p)) == Permutation.identity
     -- testRandom permutation_generator $ fun p =>  (mul p (inverse p)) == Permutation.identity
+
+-- | actually I need monad transformer
+def tests: IO (OptionM Unit) :=
+  test_permutation_group_inverse
 
 -- def test_permutation_group_assoc(p: Permutation, q: Permutation, r: Permutation):
 --     assert (p * (q * r)) == ((p * q) * r)
