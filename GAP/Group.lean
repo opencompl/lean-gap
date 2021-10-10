@@ -181,12 +181,17 @@ def schrier_decomposition(gs:  GeneratingSet) : List (GeneratingSet) :=
   schrier_decomposition_rec gs 0
 
 
-def permutation_generator : Generator Permutation :=
-  fun i => Permutation.identity
+-- | generate a random permutation of [1..n] with fisher yates 
+def permutation_generator (n: Int): Generator Permutation :=
+  fun i => 
+     def go (i: Int) (xs: Array Int) : Array Int := 
+      if i < 0 then xs
+      else xs
+     go n 
 
 def test_permutation_group_inverse: IO TestResult :=
-    testRandom permutation_generator $ fun p => do
-      match (mul p (inverse p)) == Permutation.identity with
+    testRandom permutation_generator n $ fun p => do
+      match (mul p (inverse p)) == p with -- Permutation.identity with
       | true => return TestResult.success
       | false => return TestResult.failure
     -- testRandom permutation_generator $ fun p =>  (mul p (inverse p)) == Permutation.identity
