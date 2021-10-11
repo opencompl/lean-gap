@@ -27,6 +27,11 @@ instance : ToString Permutation where
   toString 
   | Permutation.mk xs => "(" ++ toString xs ++ ")"
 
+instance : Shrinkable Permutation where
+  shrink (p: Permutation) :=
+  match p with
+  | Permutation.mk xs => (Shrinkable.shrink xs).map  Permutation.mk
+
 abbrev Set α (ord: α -> α -> Ordering) := RBMap α Unit ord
 
 
@@ -75,8 +80,8 @@ def domain (p: Permutation) : List Int := p.support.map (fun (x, y) => x)
 
 -- act (mul p q) $  x = act p $ act q x
 def mul (p: Permutation) (q: Permutation) : Permutation :=
-  let xs := domain p ++ domain q
-  Permutation.mk $ xs.map (fun x => (x, p.act (q.act x)))
+  let xs := List.range (max p.largest_moved q.largest_moved).toNat
+  Permutation.mk $ xs.map $ (fun x => let x := Int.ofNat x; (x, p.act (q.act x)))
 
 def inverse (p: Permutation): Permutation := 
   Permutation.mk $ p.support.map (fun (x, y) => (y, x))
@@ -231,7 +236,7 @@ partial def rand_permutation (n: Int): Rand Permutation :=
 
 def test_permutation_group_inverse: IO TestResult :=
     testRandom "p * inv p == id"  (rand_permutation 5) $ fun (p: Permutation) => do
-      (mul p (inverse p)) =?= p -- Permutation.identity with
+      (mul p (inverse p)) =?= Permutation.identity
 
 -- | actually I need monad transformer
 def tests: IO TestResult :=

@@ -67,9 +67,55 @@ def testEq [ToString α] [BEq α] (a a': α): TestResult :=
 
 notation x "=?=" y => testEq x y
 
+class Shrinkable (α : Type) where
+  shrink: α → List α
+
+-- | default, enables no shrinking!
+instance  (priority := low): Shrinkable (α : Type) where
+  shrink _ := []
+
+
+instance [Shrinkable α] : Shrinkable (List α) where
+  shrink (xs: List α) : List (List α) := 
+    match xs with
+    | [] => []
+    | _ => 
+       let shrinkIth {β : Type} [Shrinkable β] (bs: List β) (i: Nat) : List β :=
+         let ls := (bs.take i)
+         let rs := (bs.drop i)
+         ls ++ rs.drop 1
+         -- match rs with
+         --   | [] => [ls]
+         --   | r::rs => 
+         --        let rsmalls := (Shrinkable.shrink r)
+         --        match rsmalls with 
+         --        | [] => [ls ++ rs]
+         --        | _ => rsmalls.map fun r' => ls ++ [r'] ++ rs
+       let ixs := List.range (xs.length)
+       ixs.map fun i => shrinkIth xs i
+
+    
+
+-- | returns minimal counterexample along with error
+def minimizeCounterexample [Shrinkable α] (a: α) (p: α -> TestResult): α × String :=
+  let rec go (xs: List α): α × String:= 
+    -- assert! p a == False
+    match xs with
+    | [] => 
+      match p a with
+      | TestResult.success => (a, "ERROR: MINIMAL COUNTEREXAMPLE SUCCEEDED ON INPUT")
+      | TestResult.failure err => (a, err)
+    | x::xs => 
+      match p x with
+      | TestResult.failure err => (x, err)
+      | TestResult.success => go xs
+  go (Shrinkable.shrink a)
+
+
+
 
 -- | return some () on success.
-def testRandom [ToString α] (name: String) (ra: Rand α) (p: α -> TestResult): IO TestResult := do
+def testRandom [ToString α] [Shrinkable α] (name: String) (ra: Rand α) (p: α -> TestResult): IO TestResult := do
    let total := 120
    let rec go (n: Nat) : RandIO TestResult :=  do
      match n with
@@ -83,7 +129,9 @@ def testRandom [ToString α] (name: String) (ra: Rand α) (p: α -> TestResult):
                       "\rsucceeded test [" ++ toString (total-n+1) ++ "/" ++ toString total ++ "]"
                  go n' 
            | TestResult.failure err => do
-              liftIO2RandIO $ IO.eprintln $ "\nfailed at counter-example: " 
+              let (a, err) := minimizeCounterexample a p
+              liftIO2RandIO $ IO.eprintln $ "\nfailed at counter-example:" 
+              liftIO2RandIO $ IO.eprintln $ toString a
               liftIO2RandIO $ IO.eprintln $ err
               return TestResult.failure err
 
