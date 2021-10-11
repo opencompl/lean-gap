@@ -12,9 +12,13 @@ inductive TestResult
 abbrev Rand α := StdGen -> α × StdGen
 abbrev RandIO α := StdGen -> IO (α × StdGen)
 
-
-def liftRand (ma: Rand α): RandIO α := 
+def liftRand2RandIO (ma: Rand α): RandIO α := 
   fun gen => return (ma gen)
+
+def liftIO2RandIO (ma: IO α): RandIO α := 
+  fun gen => do
+     let a <- ma
+     return (a, gen)
 
 def randPure (a: α) : Rand α := fun gen => (a, gen)
 def randBind (ma: Rand α) (a2mb: α -> Rand β) : Rand β := 
@@ -54,18 +58,20 @@ def testRandom [ToString α] (ra: Rand α) (p: α -> TestResult): IO TestResult 
      match n with
      | 0 => return TestResult.success
      | Nat.succ n' => do 
-           let a <- liftRand ra n
-           match p (ra n) with
+           let a <- liftRand2RandIO $ ra
+           match p a with
            | TestResult.success => do
-                 IO.eprint $ "\rsucceeded test [" ++ toString (total - n + 1) ++ "/" ++ toString total ++ "]"
+                 liftIO2RandIO $ 
+                    IO.eprint $ "\rsucceeded test [" ++ toString (total - n + 1) ++ "/" ++ toString total ++ "]"
                  go n' 
            | TestResult.failure => do
-              IO.eprintln $ "failed at counter-example(seed= " ++ toString n ++ "): " ++ toString a
+              liftIO2RandIO $ 
+                IO.eprintln $ "failed at counter-example(seed= " ++ toString n ++ "): " ++ toString a
               return TestResult.failure
 
    IO.eprintln "\n---"
    IO.eprint $ "running tests... [0/" ++ toString total ++ "]"
-   let out := evaluateRand (go total)
+   let (out, _) <- go total (mkStdGen 0)
    match out with
    | TestResult.success => IO.eprintln "\nPassed all tests"
    | TestResult.failure => IO.eprintln "\nFailed test"
