@@ -13,65 +13,94 @@ open Std
 
 abbrev Cycle := List Int
 abbrev Cycles := List Cycle
-abbrev Permutation := List (Int × Int)
+inductive Permutation where 
+| mk: List (Int × Int) -> Permutation
+
+def Permutation.support: Permutation -> List (Int × Int)
+| Permutation.mk xs => xs
+
+
+instance : Inhabited Permutation where 
+  default := Permutation.mk []
+
+instance : ToString Permutation where
+  toString 
+  | Permutation.mk xs => "(" ++ toString xs ++ ")"
 
 abbrev Set α (ord: α -> α -> Ordering) := RBMap α Unit ord
 
-class SetLike (s: Type -> Type) where
-   setEmpty:  s a 
-   setSingleton: a -> s a
-   setUnion: s a -> s a -> s a
-   setDifference: s a -> s a -> s a
-   setIntersection: s a -> s a -> s a
-   
 
-class MapLike (m: Type -> Type -> Type) where
-   mapEmpty:  m k v
-   mapInsert: k -> v -> m k v -> m k v
-   mapDelete: k -> m k v -> m k v
-   mapLookup: k -> m k v -> Option v
+
+-- class SetLike (s: Type -> Type) where
+--    setEmpty:  s a 
+--    setSingleton: a -> s a
+--    setUnion: s a -> s a -> s a
+--    setDifference: s a -> s a -> s a
+--    setIntersection: s a -> s a -> s a
+--    
+-- 
+-- class MapLike (m: Type -> Type -> Type) where
+--    mapEmpty:  m k v
+--    mapInsert: k -> v -> m k v -> m k v
+--    mapDelete: k -> m k v -> m k v
+--    mapLookup: k -> m k v -> Option v
    
 
 -- | action of permutation on element
-def act (p: Permutation) (a: Int) : Int :=
+def act_ (p: List (Int × Int)) (a: Int) : Int :=
   match p with
   | [] => a
-  | (x,y)::ps => if x == a then y else act ps a
+  | (x,y)::ps => if x == a then y else act_ ps a
 
-def permutation_largest_moved(p: Permutation) : Int := 
+
+def Permutation.act(p: Permutation) (a: Int): Int := act_ p.support a
+
+def permutation_largest_moved_(p: List (Int × Int)) : Int := 
 match p with
 | [] => 0
 | (x,y)::ps => 
-    let best' := permutation_largest_moved ps
+    let best' := permutation_largest_moved_ ps
     if x == y then best' else max x best'
 
-def Permutation.identity : Permutation := []
+def Permutation.largest_moved (p: Permutation): Int := permutation_largest_moved_ p.support
 
-def domain (p: Permutation) : List Int := p.map (fun (x, y) => x)
+instance : BEq Permutation where
+   beq p q := 
+      let n := max p.largest_moved q.largest_moved
+      (List.range n.toNat).all $ fun n => p.act n == q.act n
+
+def Permutation.identity : Permutation := Permutation.mk []
+
+def domain (p: Permutation) : List Int := p.support.map (fun (x, y) => x)
 
 -- act (mul p q) $  x = act p $ act q x
 def mul (p: Permutation) (q: Permutation) : Permutation :=
   let xs := domain p ++ domain q
-  xs.map (fun x => (x, act p (act q x)))
+  Permutation.mk $ xs.map (fun x => (x, p.act (q.act x)))
 
-def inverse (p: Permutation): Permutation := p.map (fun (x, y) => (y, x))
+def inverse (p: Permutation): Permutation := 
+  Permutation.mk $ p.support.map (fun (x, y) => (y, x))
 
 partial def orbit (p: Permutation) (x: Int): Cycle := 
   let rec go (p: Permutation) (start: Int) (cur: Int) :=
-    if cur == start then [] else cur :: go p start (act p cur)
-  x :: go p x (act p x)
+      if cur == start then [] else cur :: go p start (p.act cur)
+  x :: go p x (p.act x)
 
-def cycles_ (p: Permutation) (seen: List Int): Cycles :=
-match p with
+-- | compute cycle decomposiition for p, given that we are currently trying to 
+-- build cycle at (head cur_domain), are yet to process (rest cur_domain)
+-- and have seen stuff in `seen`.
+-- TODO: consider filtering cur_domain by seen?
+def cycles_ (p: Permutation) (cur_domain: List Int) (seen: List Int): Cycles :=
+match cur_domain with
 | [] => []
-| (x,y)::ps => 
-    if  seen.elem x then cycles_ ps seen
-    else let orb := orbit p x 
-         if orb.length == 1 then (cycles_ ps (seen ++ orb))
-         else orb :: (cycles_ ps (seen ++ orb))
+| d::ds => 
+    if  seen.elem d then cycles_ p ds seen
+    else let orb := orbit p d
+         if orb.length == 1 then (cycles_ p ds (seen ++ orb))
+         else orb :: (cycles_ p ds (seen ++ orb))
 
 
-def cycles (p: Permutation): Cycles := cycles_ p []
+def cycles (p: Permutation): Cycles := cycles_ p [] []
 
 def cycle_to_string (c: Cycle) : String := 
   "(" ++ ",".intercalate (c.map toString) ++ ")"
@@ -86,7 +115,7 @@ abbrev SchrierVector := AssocList Int (Option (Permutation × Int))
       
 
 partial def least_nonfixed_rec (p: Permutation) (i: Int) :=
-  if act p i != i then i else least_nonfixed_rec p (i + 1)
+  if p.act i != i then i else least_nonfixed_rec p (i + 1)
 
 def least_nonfixed (p: Permutation) : Int := least_nonfixed_rec p 0
 
@@ -96,6 +125,7 @@ abbrev GeneratingSet := List Permutation
 def sims_filter (g: GeneratingSet) (sn: Int) : GeneratingSet := sorry
 
 
+-- | generate all permutations from the generating set
 partial def generate_rec (gs: GeneratingSet) (cur: List Permutation): List Permutation := 
   let next := gs.bind (fun g => cur.map (mul g))
   let delta := List.removeAll next cur
@@ -111,7 +141,8 @@ def snd (x: α × β) : β :=  match x with | (_, b) => b
 -- | map element in the orbit to the element that created it.
 partial def generating_set_orbit_rec(gs: GeneratingSet) (frontier: List (Int × Permutation)) (out: List (Int × Permutation)): List (Int × Permutation)  :=
   -- | expand the BFS frontier
-  let frontier': List (Int × Permutation) := gs.bind (fun g => frontier.map (fun (k, h) => (act g k, mul g h)))
+  let frontier': List (Int × Permutation) := 
+    gs.bind (fun g => frontier.map (fun (k, h) => (g.act k, mul g h)))
   let seen : List Int := out.map fst
   -- | keep those that have not been sen
   let frontier' : List (Int × Permutation) := 
@@ -160,9 +191,10 @@ def GeneratingSet.stabilizer_subgroup (gs: GeneratingSet) (k: Int) : GeneratingS
        let orep := (orbit.lookup o).get!
        mul g (inverse orep) -- remove the part of `g` that causes it to move `k` to `o`.
   -- | augment gs with information of where in the orbit it lies
-  let gs : List (Int × Permutation) := gs.map (fun g => (act g k, g))
+  let gs : List (Int × Permutation) := gs.map (fun g => (g.act k, g))
   -- | take all products
-  let genset : List (Int × Permutation) := gs.bind (fun (_, g) => orbit.map fun (o, h)  => (act g o, mul g h))
+  let genset : List (Int × Permutation) := 
+     gs.bind (fun (_, g) => orbit.map fun (o, h)  => (g.act o, mul g h))
   -- | purify
   genset.map (fun (o, g) => purify o g)
     
@@ -184,7 +216,7 @@ def schrier_decomposition(gs:  GeneratingSet) : List (GeneratingSet) :=
 
 -- | generate a random permutation of [1..n] with fisher yates 
 
-partial def rand_permutation (n: Int): Rand (List (Int × Int)) := 
+partial def rand_permutation (n: Int): Rand Permutation := 
    let rec go (i: Int) (unseen: List Int): Rand (List (Int × Int)) := do
      if i == n then return []
      else do
@@ -194,14 +226,12 @@ partial def rand_permutation (n: Int): Rand (List (Int × Int)) :=
         return (i, r)::rest
    let xs := List.range (n.toNat)
    let xs := xs.map (fun n => Int.ofNat n)
-   go 0 xs
+   Permutation.mk <$> go 0 xs
 
 
 def test_permutation_group_inverse: IO TestResult :=
     testRandom "p * inv p == id"  (rand_permutation 5) $ fun (p: Permutation) => do
-      match (mul p (inverse p)) == p with -- Permutation.identity with
-      | true => return TestResult.success
-      | false => return TestResult.failure
+      (mul p (inverse p)) =?= p -- Permutation.identity with
 
 -- | actually I need monad transformer
 def tests: IO TestResult :=

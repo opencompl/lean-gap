@@ -7,7 +7,7 @@ open Std
   
 inductive TestResult
 | success
-| failure
+| failure (err: String)
 
 abbrev Rand α := StdGen -> α × StdGen
 abbrev RandIO α := StdGen -> IO (α × StdGen)
@@ -60,6 +60,13 @@ def randOneOf [Inhabited α] (xs: List α): Rand α := do
   return xs.get! randIx
 
 
+def testEq [ToString α] [BEq α] (a a': α): TestResult :=
+  if a == a'
+  then TestResult.success
+  else TestResult.failure $ toString a ++ " != " ++ toString a'
+
+notation x "=?=" y => testEq x y
+
 
 -- | return some () on success.
 def testRandom [ToString α] (name: String) (ra: Rand α) (p: α -> TestResult): IO TestResult := do
@@ -72,19 +79,20 @@ def testRandom [ToString α] (name: String) (ra: Rand α) (p: α -> TestResult):
            match p a with
            | TestResult.success => do
                  liftIO2RandIO $ 
-                    IO.eprint $ "\rsucceeded test [" ++ toString (total - n + 1) ++ "/" ++ toString total ++ "]"
+                    IO.eprint $ 
+                      "\rsucceeded test [" ++ toString (total-n+1) ++ "/" ++ toString total ++ "]"
                  go n' 
-           | TestResult.failure => do
-              liftIO2RandIO $ 
-                IO.eprintln $ "\nfailed at counter-example: " ++ toString a
-              return TestResult.failure
+           | TestResult.failure err => do
+              liftIO2RandIO $ IO.eprintln $ "\nfailed at counter-example: " 
+              liftIO2RandIO $ IO.eprintln $ err
+              return TestResult.failure err
 
    IO.eprintln $ "\n---[" ++ name ++ "]---"
    IO.eprint $ "running tests... [0/" ++ toString total ++ "]"
    let (out, _) <- go total (mkStdGen 0)
    match out with
    | TestResult.success => IO.eprintln "\nPassed all tests"
-   | TestResult.failure => IO.eprintln "\nFailed test"
+   | TestResult.failure _ => IO.eprintln "\nFailed test"
    return out
 
 def testExhaustive (ra: Rand a) (p: a -> OptionM Unit) (depth: Int): IO Bool := do
