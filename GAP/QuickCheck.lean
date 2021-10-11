@@ -12,6 +12,8 @@ inductive TestResult
 abbrev Rand α := StdGen -> α × StdGen
 abbrev RandIO α := StdGen -> IO (α × StdGen)
 
+
+
 def runRand (seed: Nat) (r: Rand α): α × StdGen :=  
   r (mkStdGen  seed)
 
@@ -35,6 +37,7 @@ instance : Monad Rand where
   pure  := randPure
   bind := randBind
 
+
         
 
 def randIOPure (a: α) : RandIO α := fun gen => return (a, gen)
@@ -48,6 +51,17 @@ def randIOBind (ma: RandIO α) (a2mb: α -> RandIO β) : RandIO β :=
 instance : Monad RandIO where
   pure  := randIOPure
   bind := randIOBind
+
+def rand2 (ra: Rand α) (rb: Rand β) : Rand (α × β) := do
+  let a <- ra
+  let b <- rb
+  return (a, b)
+
+def rand3 (ra: Rand α) (rb: Rand β) (rc: Rand γ) : Rand (α × β × γ) := do
+  let a <- ra
+  let b <- rb
+  let c <- rc
+  return (a, b, c)
 
         
 def randNatM (lo: Nat) (hi: Nat) : Rand Nat := 
@@ -113,7 +127,6 @@ def minimizeCounterexample [Shrinkable α] (a: α) (p: α -> TestResult): α × 
 
 
 
-
 -- | return some () on success.
 def testRandom [ToString α] [Shrinkable α] (name: String) (ra: Rand α) (p: α -> TestResult): IO TestResult := do
    let total := 120
@@ -124,8 +137,9 @@ def testRandom [ToString α] [Shrinkable α] (name: String) (ra: Rand α) (p: α
            let a <- liftRand2RandIO $ ra
            match p a with
            | TestResult.success => do
-                 liftIO2RandIO $ 
-                    IO.eprint $ 
+                 liftIO2RandIO ∘ IO.eprint $ 
+                      "\r                                                         "
+                 liftIO2RandIO ∘ IO.eprint $ 
                       "\rsucceeded test [" ++ toString (total-n+1) ++ "/" ++ toString total ++ "]"
                  go n' 
            | TestResult.failure err => do

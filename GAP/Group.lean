@@ -238,9 +238,23 @@ def test_permutation_group_inverse: IO TestResult :=
     testRandom "p * inv p == id"  (rand_permutation 5) $ fun (p: Permutation) => do
       (mul p (inverse p)) =?= Permutation.identity
 
+def test_permutation_group_assoc: IO TestResult :=
+    let gen := rand3 (rand_permutation 5) (rand_permutation 5) (rand_permutation 5)
+    testRandom "(p * (q * r)) == ((p * q) * r)" gen $
+      fun (pqr: Permutation × Permutation × Permutation) => do
+        let (p, q, r) := pqr
+        mul p (mul q r) =?= mul (mul p q) r
+
+
+-- @given(p=permutations(n=5))
+-- def test_permutation_group_id(p: Permutation):
+--     assert (p * p.identity()) == p
+--     assert p == p * p.identity()
+
 -- | actually I need monad transformer
-def tests: IO TestResult :=
-  test_permutation_group_inverse
+def tests: IO TestResult := do
+  let _ <- test_permutation_group_inverse
+  test_permutation_group_assoc
 
 -- def test_permutation_group_assoc(p: Permutation, q: Permutation, r: Permutation):
 --     assert (p * (q * r)) == ((p * q) * r)
