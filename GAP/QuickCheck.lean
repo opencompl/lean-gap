@@ -1,5 +1,5 @@
 import Init.Data.UInt
-import Init.Data.Random
+import Init.Data.Random 
 -- import Init.Data.UInt.Bitwise
 
 open Std
@@ -47,8 +47,8 @@ instance : Monad RandIO where
   bind := randIOBind
 
         
-
-
+def randNatM (lo: Nat) (hi: Nat) : Rand Nat := 
+  fun gen => randNat gen lo hi 
 
 
 -- | return some () on success.

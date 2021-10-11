@@ -182,19 +182,20 @@ def schrier_decomposition(gs:  GeneratingSet) : List (GeneratingSet) :=
 
 
 -- | generate a random permutation of [1..n] with fisher yates 
-def permutation_generator (n: Int): Generator Permutation :=
-  fun i => 
-     def go (i: Int) (xs: Array Int) : Array Int := 
-      if i < 0 then xs
-      else xs
-     go n 
+def rand_permutation (n: Int): Rand Permutation := do
+  return []
+    -- let a := Array.init n
+     -- def go (i: Int) (xs: Array Int) : Array Int :=  do
+     --  if i < 0 then xs
+     --  else 
+     -- go n (Array.init 
+     
 
 def test_permutation_group_inverse: IO TestResult :=
-    testRandom permutation_generator n $ fun p => do
+    testRandom (rand_permutation 5) $ fun (p: Permutation) => do
       match (mul p (inverse p)) == p with -- Permutation.identity with
       | true => return TestResult.success
       | false => return TestResult.failure
-    -- testRandom permutation_generator $ fun p =>  (mul p (inverse p)) == Permutation.identity
 
 -- | actually I need monad transformer
 def tests: IO TestResult :=
