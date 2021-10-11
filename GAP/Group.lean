@@ -72,6 +72,7 @@ def Permutation.largest_moved (p: Permutation): Int :=
 
 
 -- | create range [1..n]
+-- | TODO: move to [1..n], currently at [0..n]!
 partial def range1n (n: Int): List Int := 
   let rec go (i: Int) : List Int :=
     if i == n then [n]
