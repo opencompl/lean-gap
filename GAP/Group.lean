@@ -181,18 +181,24 @@ def schrier_decomposition(gs:  GeneratingSet) : List (GeneratingSet) :=
   schrier_decomposition_rec gs 0
 
 
+
 -- | generate a random permutation of [1..n] with fisher yates 
-def rand_permutation (n: Int): Rand Permutation := do
-  return []
-    -- let a := Array.init n
-     -- def go (i: Int) (xs: Array Int) : Array Int :=  do
-     --  if i < 0 then xs
-     --  else 
-     -- go n (Array.init 
-     
+
+partial def rand_permutation (n: Int): Rand (List (Int × Int)) := 
+   let rec go (i: Int) (unseen: List Int): Rand (List (Int × Int)) := do
+     if i == n then return []
+     else do
+       let r <- randOneOf unseen
+       let unseen := List.filter (fun v => v != r) unseen
+       let rest <- go (i+1) unseen
+        return (i, r)::rest
+   let xs := List.range (n.toNat)
+   let xs := xs.map (fun n => Int.ofNat n)
+   go 0 xs
+
 
 def test_permutation_group_inverse: IO TestResult :=
-    testRandom (rand_permutation 5) $ fun (p: Permutation) => do
+    testRandom "p * inv p == id"  (rand_permutation 5) $ fun (p: Permutation) => do
       match (mul p (inverse p)) == p with -- Permutation.identity with
       | true => return TestResult.success
       | false => return TestResult.failure

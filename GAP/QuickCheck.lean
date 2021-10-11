@@ -12,6 +12,9 @@ inductive TestResult
 abbrev Rand α := StdGen -> α × StdGen
 abbrev RandIO α := StdGen -> IO (α × StdGen)
 
+def runRand (seed: Nat) (r: Rand α): α × StdGen :=  
+  r (mkStdGen  seed)
+
 def liftRand2RandIO (ma: Rand α): RandIO α := 
   fun gen => return (ma gen)
 
@@ -50,9 +53,16 @@ instance : Monad RandIO where
 def randNatM (lo: Nat) (hi: Nat) : Rand Nat := 
   fun gen => randNat gen lo hi 
 
+-- | randomly choose one of
+def randOneOf [Inhabited α] (xs: List α): Rand α := do
+  let maxIx := xs.length - 1
+  let randIx <- randNatM 0 maxIx
+  return xs.get! randIx
+
+
 
 -- | return some () on success.
-def testRandom [ToString α] (ra: Rand α) (p: α -> TestResult): IO TestResult := do
+def testRandom [ToString α] (name: String) (ra: Rand α) (p: α -> TestResult): IO TestResult := do
    let total := 120
    let rec go (n: Nat) : RandIO TestResult :=  do
      match n with
@@ -66,10 +76,10 @@ def testRandom [ToString α] (ra: Rand α) (p: α -> TestResult): IO TestResult 
                  go n' 
            | TestResult.failure => do
               liftIO2RandIO $ 
-                IO.eprintln $ "failed at counter-example(seed= " ++ toString n ++ "): " ++ toString a
+                IO.eprintln $ "\nfailed at counter-example: " ++ toString a
               return TestResult.failure
 
-   IO.eprintln "\n---"
+   IO.eprintln $ "\n---[" ++ name ++ "]---"
    IO.eprint $ "running tests... [0/" ++ toString total ++ "]"
    let (out, _) <- go total (mkStdGen 0)
    match out with
