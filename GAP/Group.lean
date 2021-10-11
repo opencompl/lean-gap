@@ -65,14 +65,23 @@ match p with
 | [] => 0
 | (x,y)::ps => 
     let best' := permutation_largest_moved_ ps
-    if x == y then best' else max x best'
+    max x (max y best')
 
-def Permutation.largest_moved (p: Permutation): Int := permutation_largest_moved_ p.support
+def Permutation.largest_moved (p: Permutation): Int := 
+  permutation_largest_moved_ p.support
+
+
+-- | create range [1..n]
+partial def range1n (n: Int): List Int := 
+  let rec go (i: Int) : List Int :=
+    if i == n then [n]
+    else i::go (i + 1)
+  go 0
 
 instance : BEq Permutation where
    beq p q := 
       let n := max p.largest_moved q.largest_moved
-      (List.range n.toNat).all $ fun n => p.act n == q.act n
+      (range1n n).all $ fun n => p.act n == q.act n
 
 def Permutation.identity : Permutation := Permutation.mk []
 
@@ -80,8 +89,9 @@ def domain (p: Permutation) : List Int := p.support.map (fun (x, y) => x)
 
 -- act (mul p q) $  x = act p $ act q x
 def mul (p: Permutation) (q: Permutation) : Permutation :=
-  let xs := List.range (max p.largest_moved q.largest_moved).toNat
-  Permutation.mk $ xs.map $ (fun x => let x := Int.ofNat x; (x, p.act (q.act x)))
+  let n := max p.largest_moved q.largest_moved
+  let xs := range1n n
+  Permutation.mk $ xs.map (fun x => (x, p.act (q.act x)))
 
 def inverse (p: Permutation): Permutation := 
   Permutation.mk $ p.support.map (fun (x, y) => (y, x))
@@ -223,14 +233,13 @@ def schrier_decomposition(gs:  GeneratingSet) : List (GeneratingSet) :=
 
 partial def rand_permutation (n: Int): Rand Permutation := 
    let rec go (i: Int) (unseen: List Int): Rand (List (Int × Int)) := do
-     if i == n then return []
+     if i == n + 1 then return []
      else do
        let r <- randOneOf unseen
        let unseen := List.filter (fun v => v != r) unseen
        let rest <- go (i+1) unseen
         return (i, r)::rest
-   let xs := List.range (n.toNat)
-   let xs := xs.map (fun n => Int.ofNat n)
+   let xs := range1n n
    Permutation.mk <$> go 0 xs
 
 
@@ -241,20 +250,22 @@ def test_permutation_group_inverse: IO TestResult :=
 def test_permutation_group_assoc: IO TestResult :=
     let gen := rand3 (rand_permutation 5) (rand_permutation 5) (rand_permutation 5)
     testRandom "(p * (q * r)) == ((p * q) * r)" gen $
-      fun (pqr: Permutation × Permutation × Permutation) => do
-        let (p, q, r) := pqr
+      fun ((p, q, r): Permutation × Permutation × Permutation) => do
+        -- let (p, q, r) := pqr
         mul p (mul q r) =?= mul (mul p q) r
 
 
--- @given(p=permutations(n=5))
--- def test_permutation_group_id(p: Permutation):
---     assert (p * p.identity()) == p
---     assert p == p * p.identity()
+def test_permutation_group_id: IO TestResult := do
+    let _ <- testRandom "p * id == p" (rand_permutation 5) $ fun (p: Permutation) => 
+      (mul p Permutation.identity) =?= p
+    testRandom "id  * p == p" (rand_permutation 5) $ fun (p: Permutation) =>
+      (mul Permutation.identity p) =?= p
 
 -- | actually I need monad transformer
 def tests: IO TestResult := do
   let _ <- test_permutation_group_inverse
-  test_permutation_group_assoc
+  let _ <- test_permutation_group_assoc
+  test_permutation_group_id
 
 -- def test_permutation_group_assoc(p: Permutation, q: Permutation, r: Permutation):
 --     assert (p * (q * r)) == ((p * q) * r)
