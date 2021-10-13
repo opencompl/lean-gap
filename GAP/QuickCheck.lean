@@ -156,9 +156,9 @@ def minimizeCounterexample [Shrinkable α] (a: α) (p: α -> TestResult Unit): �
 
 
 -- | return some () on success.
+-- TODO: rewrite with liftM and monad transformers.
 def testRandom [ToString α] [Shrinkable α] 
-   (name: String) (ra: Rand α) (p: α -> TestResult Unit): IO (TestResult Unit) := do
-   let total := 120
+   (name: String) (ra: Rand α) (p: α -> TestResult Unit) (ntests : Nat := 120): IO (TestResult Unit) := do
    let rec go (n: Nat) : RandIO (TestResult Unit) :=  do
      match n with
      | 0 => return TestResult.success ()
@@ -169,18 +169,19 @@ def testRandom [ToString α] [Shrinkable α]
                  liftIO2RandIO ∘ IO.eprint $ 
                       "\r                                                         "
                  liftIO2RandIO ∘ IO.eprint $ 
-                      "\rsucceeded test [" ++ toString (total-n+1) ++ "/" ++ toString total ++ "]"
+                      "\rsucceeded test [" ++ toString (ntests - n+1) ++ "/" ++ toString ntests ++ "]"
                  go n' 
            | TestResult.failure err => do
               let (a, err) := minimizeCounterexample a p
-              liftIO2RandIO $ IO.eprintln $ "\nfailed at counter-example:" 
+              liftIO2RandIO $ IO.eprintln $ "\nfailed test [" ++ toString (ntests - n + 1) ++ "] at counter-example:" 
               liftIO2RandIO $ IO.eprintln $ toString a
               liftIO2RandIO $ IO.eprintln $ err
+              let _ <- go n'
               return TestResult.failure err
 
    IO.eprintln $ "\n---[" ++ name ++ "]---"
-   IO.eprint $ "running tests... [0/" ++ toString total ++ "]"
-   let (out, _) <- go total (mkStdGen 0)
+   IO.eprint $ "running tests... [0/" ++ toString ntests ++ "]"
+   let (out, _) <- go ntests (mkStdGen 0)
    match out with
    | TestResult.success () => IO.eprintln "\nPassed all tests"
    | TestResult.failure _ => IO.eprintln "\nFailed test"

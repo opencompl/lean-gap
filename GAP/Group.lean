@@ -119,7 +119,7 @@ match cur_domain with
 def cycles (p: Permutation): Cycles := cycles_ p [] []
 
 def cycle_to_string (c: Cycle) : String := 
-  "(" ++ ",".intercalate (c.map toString) ++ ")"
+  "(" ++ " ".intercalate (c.map toString) ++ ")"
 
 def permutation_to_string (p: Permutation) : String := 
   String.join $ (cycles p).map cycle_to_string
@@ -144,29 +144,31 @@ def sims_filter (g: GeneratingSet) (sn: Int) : GeneratingSet := sorry
 -- | generate all permutations from the generating set
 partial def generate_rec (gs: GeneratingSet) (cur: List Permutation): List Permutation := 
   let next := gs.bind (fun g => cur.map (mul g))
-  let delta := List.removeAll next cur
-  if List.length next  == 0
+  let delta := next.removeAll cur
+  if List.length delta  == 0
   then cur
   else generate_rec gs (cur ++ delta)
 
-def generate (gs: GeneratingSet) : List Permutation := generate_rec gs [Permutation.identity]
+def generate (gs: GeneratingSet) : List Permutation := 
+  generate_rec gs [Permutation.identity]
 
 
 def fst (x: α × β) : α :=  match x with | (a, _) => a
 def snd (x: α × β) : β :=  match x with | (_, b) => b
 
 -- | map element in the orbit to the element that created it.
-partial def generating_set_orbit_rec(gs: GeneratingSet) (frontier: List (Int × Permutation)) (out: List (Int × Permutation)): List (Int × Permutation)  :=
+partial def generating_set_orbit_rec(gs: GeneratingSet) 
+   (frontier: List (Int × Permutation))
+   (out: List (Int × Permutation)): List (Int × Permutation)  :=
   -- | expand the BFS frontier
-  let frontier': List (Int × Permutation) := 
+  let frontier: List (Int × Permutation) := 
     gs.bind (fun g => frontier.map (fun (k, h) => (g.act k, mul g h)))
   let seen : List Int := out.map fst
   -- | keep those that have not been sen
-  let frontier' : List (Int × Permutation) := 
-      frontier.filter (fun (k, g) => not $ seen.contains k) 
-  if frontier'.isEmpty
+  let frontier : List (Int × Permutation) := frontier.filter (fun (k, g) => not $ seen.contains k) 
+  if frontier.isEmpty
   then out
-  else generating_set_orbit_rec gs frontier' (out ++ frontier')
+  else generating_set_orbit_rec gs frontier (out ++ frontier)
 
 
 
@@ -201,7 +203,7 @@ def GeneratingSet.orbit(gs: GeneratingSet) (k: Int): List (Int × Permutation) :
 --  However, the weird part is that THAT's NOT ENOUGH.
 --  Rather, we need the generators to be: < (gs * os).map(remove_defect) >
 --  For whatever reason, we must take all pairs of gs, os!
-def GeneratingSet.stabilizer_subgroup (gs: GeneratingSet) (k: Int) : GeneratingSet := 
+def GeneratingSet.stabilizer_subgroup_generators (gs: GeneratingSet) (k: Int) : GeneratingSet := 
   -- | treat these as representatives of stabilizer cosets.
   let orbit : List (Int × Permutation) := gs.orbit k
   let purify (o: Int) (g: Permutation) : Permutation :=
@@ -209,12 +211,14 @@ def GeneratingSet.stabilizer_subgroup (gs: GeneratingSet) (k: Int) : GeneratingS
        mul g (inverse orep) -- remove the part of `g` that causes it to move `k` to `o`.
   -- | augment gs with information of where in the orbit it lies
   let gs : List (Int × Permutation) := gs.map (fun g => (g.act k, g))
-  -- | take all products
+  -- | take all products of generators (gs) with coset representatives (orbit)
+  -- this effectively gives us the full group G, since we have translated the group (gs) along the orbits (o)
   let genset : List (Int × Permutation) := 
      gs.bind (fun (_, g) => orbit.map fun (o, h)  => (g.act o, mul g h))
   -- | purify
-  genset.map (fun (o, g) => purify o g)
-    
+  let out := genset.map (fun (o, g) => purify o g)
+  -- | remove duplicates here?
+  List.eraseDups out
 
 
 partial def schrier_decomposition_rec 
@@ -222,7 +226,7 @@ partial def schrier_decomposition_rec
    if gs == [Permutation.identity]
    then [gs]
    else 
-     let stab : GeneratingSet := gs.stabilizer_subgroup  k
+     let stab : GeneratingSet := gs.stabilizer_subgroup_generators  k
      gs :: schrier_decomposition_rec stab (k+1)
   
 
@@ -270,55 +274,46 @@ def intersects? {α: Type} [BEq α]  (as: List α) (as': List α) :=
  | a::as => if as'.contains a then true else intersects? as as'
 
 
+-- | test that we compute orbit permutation elements correctly by checking that 
+-- | their cosets are indeed cosets
 def test_stabilizer_coset_reps_slow: IO (TestResult Unit) := 
-    testRandom "stabilizer coset representatives" 
+    testRandom (ntests := 10) "stabilizer coset representatives" 
       (rand2 (randListM 1 5 $ rand_permutation 5) (randIntM 1 5)) fun ((ps, k): List Permutation × Int) => do
     let H := generate ps -- exhaustive generate group
     let Stab := H.filter (fun h => h.act k == k) -- exhaustively create stabilizer
     -- -- v find orbit permutations
-    let orb_and_perms : List (Int × Permutation) := []-- GeneratingSet.orbit ps k 
+    let orb_and_perms : List (Int × Permutation) := GeneratingSet.orbit ps k 
 
-
-    -- -- | map each element k' in the orbit [k--p-->k'] to its coset representatve pH
+    -- -- -- | map each element k' in the orbit [k--p-->k'] to its coset representatve pH
+    -- v slow to map? slow to build?
     let orb_and_cosets : List (Int × List (Permutation)) := 
         orb_and_perms.map $ fun (o, p) => (o, H.map (fun h => mul p h))
 
-    let len := orb_and_cosets.length
-    1 =?= len
+    let l := orb_and_cosets.length-1
 
-    -- [] =?= orb_and_cosets
-    -- 2 =?= orb_and_cosets.length
-    -- 1 =?= orb_and_cosets.length
-    -- -- | return from a for loop?
-    -- [0:10].forM $ fun i => 
-    --   -- [i+1:orb_and_cosets.length-1].forM $ fun j => 
-    --   --   -- let Hi : List Permutation := (orb_and_cosets.get! i).snd
-    --   --   -- let Hj : List Permutation := (orb_and_cosets.get! j).snd
-    --   --   TestResult.success ()
-    --   --   -- | cosets should have no intersection!
-    --   --   -- if intersects? Hi Hj
-    --   --   -- then TestResult.failure "cosets must have empty intersection"
-    --   --   -- else TestResult.success ()
-    --   return ()
+    -- | return from a for loop?
+    [0:l].forM $ fun i => 
+      [i+1:10].forM $ fun j => 
+      --   -- | cosets should have no intersection!
+         let Hi := (orb_and_cosets.get! i).snd
+         let Hj := (orb_and_cosets.get! j).snd
+         if intersects? Hi Hj
+         then TestResult.failure "cosets must have empty intersection"
+         else TestResult.success ()
 
-    --     
-    -- -- for x in [1:N] do
-    -- --   1 =?= 1
+    -- | check that union of all cosets is the fulll H
+    let union_cosets : List Permutation := orb_and_cosets.foldl (fun out (o, h) => out ++ h) $ []
+    union_cosets =?= H
 
-    -- return ()
+-- | test that we compute the generators of the stabilizer correctly
+def test_generators_of_stabilizer: IO (TestResult Unit) :=
+  testRandom (ntests := 10) "generators of stabilizer" 
+      (rand2 (randListM 1 5 $ rand_permutation 5) (randIntM 1 5)) fun ((ps, k): GeneratingSet × Int) => do
+        let G := generate ps
+        let stab_exhaustive := G.filter fun g => g.act k == k
+        let stab_generated := generate (ps.stabilizer_subgroup_generators k)
 
-    -- rep2coset = {}
-    -- for rep in orb2rep.values():
-    --     rep2coset[rep] = set([rep * s for s in Stab]) # create coset
-
-    -- for rep1, coset1 in rep2coset.items():
-    --     for rep2, coset2 in rep2coset.items():
-    --         if rep1 == rep2: continue
-    --         assert(len(coset1.intersection(coset2)) == 0) # cosets have no intersection
-
-    -- union_of_cosets = set()
-    -- for rep, coset in rep2coset.items():
-    --     union_of_cosets.update(coset)
+        stab_exhaustive =?= stab_generated
 
 
 -- | actually I need monad transformer
@@ -326,6 +321,7 @@ def tests: IO (TestResult Unit) := do
   let _ <- test_permutation_group_inverse
   let _ <- test_permutation_group_assoc
   let _ <- test_stabilizer_coset_reps_slow
+  let _ <- test_generators_of_stabilizer
   test_permutation_group_id
 
 
@@ -707,7 +703,7 @@ def test_stabilizer_coset_reps_slow(ps: List[Permutation], k:int):
     assert H == union_of_cosets # check that group is equal to union of cosets of stabilizer.
 
 @given(ps=lists(permutations(n=5), min_size=1, max_size=4), k=integers(0, 4))
-def test_generators_of_stabilizer(ps: List[Permutation], k:int):
+def test_generators_of_stabilizer(ps: Gene, k:int):
     N = 5
 
     H = generate_from_generators(ps) # exhaustive generate group
