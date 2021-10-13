@@ -148,6 +148,7 @@ partial def generate_rec (gs: GeneratingSet) (cur: List Permutation): List Permu
   if List.length next  == 0
   then cur
   else generate_rec gs (cur ++ delta)
+
 def generate (gs: GeneratingSet) : List Permutation := generate_rec gs [Permutation.identity]
 
 
@@ -244,11 +245,11 @@ partial def rand_permutation (n: Int): Rand Permutation :=
    Permutation.mk <$> go 0 xs
 
 
-def test_permutation_group_inverse: IO TestResult :=
+def test_permutation_group_inverse: IO (TestResult Unit) :=
     testRandom "p * inv p == id"  (rand_permutation 5) $ fun (p: Permutation) => do
       (mul p (inverse p)) =?= Permutation.identity
 
-def test_permutation_group_assoc: IO TestResult :=
+def test_permutation_group_assoc: IO (TestResult Unit) :=
     let gen := rand3 (rand_permutation 5) (rand_permutation 5) (rand_permutation 5)
     testRandom "(p * (q * r)) == ((p * q) * r)" gen $
       fun ((p, q, r): Permutation × Permutation × Permutation) => do
@@ -256,24 +257,77 @@ def test_permutation_group_assoc: IO TestResult :=
         mul p (mul q r) =?= mul (mul p q) r
 
 
-def test_permutation_group_id: IO TestResult := do
+def test_permutation_group_id: IO (TestResult Unit) := do
     let _ <- testRandom "p * id == p" (rand_permutation 5) $ fun (p: Permutation) => 
       (mul p Permutation.identity) =?= p
     testRandom "id  * p == p" (rand_permutation 5) $ fun (p: Permutation) =>
       (mul Permutation.identity p) =?= p
 
+
+def intersects? {α: Type} [BEq α]  (as: List α) (as': List α) := 
+ match as with
+ | [] => false
+ | a::as => if as'.contains a then true else intersects? as as'
+
+
+def test_stabilizer_coset_reps_slow: IO (TestResult Unit) := 
+    testRandom "stabilizer coset representatives" 
+      (rand2 (randListM 1 5 $ rand_permutation 5) (randIntM 1 5)) fun ((ps, k): List Permutation × Int) => do
+    let H := generate ps -- exhaustive generate group
+    let Stab := H.filter (fun h => h.act k == k) -- exhaustively create stabilizer
+    -- -- v find orbit permutations
+    let orb_and_perms : List (Int × Permutation) := []-- GeneratingSet.orbit ps k 
+
+
+    -- -- | map each element k' in the orbit [k--p-->k'] to its coset representatve pH
+    let orb_and_cosets : List (Int × List (Permutation)) := 
+        orb_and_perms.map $ fun (o, p) => (o, H.map (fun h => mul p h))
+
+    let len := orb_and_cosets.length
+    1 =?= len
+
+    -- [] =?= orb_and_cosets
+    -- 2 =?= orb_and_cosets.length
+    -- 1 =?= orb_and_cosets.length
+    -- -- | return from a for loop?
+    -- [0:10].forM $ fun i => 
+    --   -- [i+1:orb_and_cosets.length-1].forM $ fun j => 
+    --   --   -- let Hi : List Permutation := (orb_and_cosets.get! i).snd
+    --   --   -- let Hj : List Permutation := (orb_and_cosets.get! j).snd
+    --   --   TestResult.success ()
+    --   --   -- | cosets should have no intersection!
+    --   --   -- if intersects? Hi Hj
+    --   --   -- then TestResult.failure "cosets must have empty intersection"
+    --   --   -- else TestResult.success ()
+    --   return ()
+
+    --     
+    -- -- for x in [1:N] do
+    -- --   1 =?= 1
+
+    -- return ()
+
+    -- rep2coset = {}
+    -- for rep in orb2rep.values():
+    --     rep2coset[rep] = set([rep * s for s in Stab]) # create coset
+
+    -- for rep1, coset1 in rep2coset.items():
+    --     for rep2, coset2 in rep2coset.items():
+    --         if rep1 == rep2: continue
+    --         assert(len(coset1.intersection(coset2)) == 0) # cosets have no intersection
+
+    -- union_of_cosets = set()
+    -- for rep, coset in rep2coset.items():
+    --     union_of_cosets.update(coset)
+
+
 -- | actually I need monad transformer
-def tests: IO TestResult := do
+def tests: IO (TestResult Unit) := do
   let _ <- test_permutation_group_inverse
   let _ <- test_permutation_group_assoc
+  let _ <- test_stabilizer_coset_reps_slow
   test_permutation_group_id
 
--- def test_permutation_group_assoc(p: Permutation, q: Permutation, r: Permutation):
---     assert (p * (q * r)) == ((p * q) * r)
--- 
--- def test_permutation_group_id(p: Permutation):
---     assert (p * p.identity()) == p
---     assert p == p * p.identity()
 
 
 /-

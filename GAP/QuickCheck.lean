@@ -5,13 +5,23 @@ import Init.Data.Random
 open Std
 
   
-inductive TestResult
-| success
-| failure (err: String)
+inductive TestResult (α: Type) 
+| success: α → TestResult α 
+| failure: String → TestResult α 
+
+def testResultPure (a: α) : TestResult α := TestResult.success a
+def testResultBind (ma: TestResult α) (a2mb: α -> TestResult β): TestResult β  := 
+  match ma with
+  | TestResult.success a => a2mb a
+  | TestResult.failure f => TestResult.failure f
+
+instance : Monad TestResult where
+  pure  := testResultPure
+  bind := testResultBind
+
 
 abbrev Rand α := StdGen -> α × StdGen
 abbrev RandIO α := StdGen -> IO (α × StdGen)
-
 
 
 def runRand (seed: Nat) (r: Rand α): α × StdGen :=  
@@ -67,6 +77,24 @@ def rand3 (ra: Rand α) (rb: Rand β) (rc: Rand γ) : Rand (α × β × γ) := d
 def randNatM (lo: Nat) (hi: Nat) : Rand Nat := 
   fun gen => randNat gen lo hi 
 
+def randIntM (lo: Int) (hi: Int) : Rand Int := do
+   let rδ <- randNatM 0 (hi - lo).toNat
+   return rδ + lo
+
+
+def replicateM  {m : Type → Type} [Monad m] {α : Type}  (n: Nat) (ma : m α): m (List α) :=
+  match n with
+  | 0 => return []
+  | Nat.succ n' => do 
+      let a <- ma
+      let as <- replicateM n' ma
+      return a :: as
+
+def randListM (minSize: Nat) (maxSize: Nat) (gen: Rand α) : Rand (List α)  := do
+  let n <- randNatM minSize maxSize
+  replicateM n gen
+
+
 -- | randomly choose one of
 def randOneOf [Inhabited α] (xs: List α): Rand α := do
   let maxIx := xs.length - 1
@@ -74,9 +102,9 @@ def randOneOf [Inhabited α] (xs: List α): Rand α := do
   return xs.get! randIx
 
 
-def testEq [ToString α] [BEq α] (a a': α): TestResult :=
+def testEq [ToString α] [BEq α] (a a': α): TestResult Unit :=
   if a == a'
-  then TestResult.success
+  then TestResult.success ()
   else TestResult.failure $ toString a ++ " != " ++ toString a'
 
 notation x "=?=" y => testEq x y
@@ -111,32 +139,33 @@ instance [Shrinkable α] : Shrinkable (List α) where
     
 
 -- | returns minimal counterexample along with error
-def minimizeCounterexample [Shrinkable α] (a: α) (p: α -> TestResult): α × String :=
+def minimizeCounterexample [Shrinkable α] (a: α) (p: α -> TestResult Unit): α × String :=
   let rec go (xs: List α): α × String:= 
     -- assert! p a == False
     match xs with
     | [] => 
       match p a with
-      | TestResult.success => (a, "ERROR: MINIMAL COUNTEREXAMPLE SUCCEEDED ON INPUT")
+      | TestResult.success () => (a, "ERROR: MINIMAL COUNTEREXAMPLE SUCCEEDED ON INPUT")
       | TestResult.failure err => (a, err)
     | x::xs => 
       match p x with
       | TestResult.failure err => (x, err)
-      | TestResult.success => go xs
+      | TestResult.success () => go xs
   go (Shrinkable.shrink a)
 
 
 
 -- | return some () on success.
-def testRandom [ToString α] [Shrinkable α] (name: String) (ra: Rand α) (p: α -> TestResult): IO TestResult := do
+def testRandom [ToString α] [Shrinkable α] 
+   (name: String) (ra: Rand α) (p: α -> TestResult Unit): IO (TestResult Unit) := do
    let total := 120
-   let rec go (n: Nat) : RandIO TestResult :=  do
+   let rec go (n: Nat) : RandIO (TestResult Unit) :=  do
      match n with
-     | 0 => return TestResult.success
+     | 0 => return TestResult.success ()
      | Nat.succ n' => do 
            let a <- liftRand2RandIO $ ra
            match p a with
-           | TestResult.success => do
+           | TestResult.success () => do
                  liftIO2RandIO ∘ IO.eprint $ 
                       "\r                                                         "
                  liftIO2RandIO ∘ IO.eprint $ 
@@ -153,10 +182,7 @@ def testRandom [ToString α] [Shrinkable α] (name: String) (ra: Rand α) (p: α
    IO.eprint $ "running tests... [0/" ++ toString total ++ "]"
    let (out, _) <- go total (mkStdGen 0)
    match out with
-   | TestResult.success => IO.eprintln "\nPassed all tests"
+   | TestResult.success () => IO.eprintln "\nPassed all tests"
    | TestResult.failure _ => IO.eprintln "\nFailed test"
    return out
-
-def testExhaustive (ra: Rand a) (p: a -> OptionM Unit) (depth: Int): IO Bool := do
-   return true
 
