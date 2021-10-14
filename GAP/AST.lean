@@ -44,7 +44,7 @@ mutual
   | expr_range2: (first: Expr) -> (last: Expr) -> Expr
   | expr_range3: (first: Expr) -> (second: Expr) -> (last: Expr) -> Expr
   | expr_bool: Bool -> Expr
-  | expr_num: Int -> Expr
+  | expr_int: Int -> Expr
   | expr_fn_call: (name: String) -> (args: List Expr) -> Expr
   | expr_list_composition: (lhs: String) -> (rhs: Expr) -> Expr
   | expr_var: String -> Expr
@@ -86,7 +86,7 @@ mutual
     | Expr.expr_range3 a b z =>
         "[" ++ expr_to_doc a ++ ", " ++ expr_to_doc b ++ ".." ++ expr_to_doc z ++ "]" 
     | Expr.expr_bool b => if b then "true" else "false"
-    | Expr.expr_num i => doc i
+    | Expr.expr_int i => doc i
     | Expr.expr_fn_call f xs =>
         let doc_xs := intercalate_doc (List.map expr_to_doc xs) ", " 
         f ++ "(" ++  doc_xs ++ ")"
@@ -292,7 +292,7 @@ mutual
             return Expr.expr_neg e
     else if (<- p2peek? pnumber) then do
       let n <- pnumber
-      return Expr.expr_num n
+      return Expr.expr_int n
     else if (<- pident?) then do
           let ident <- pvar!
           -- lambda: <ident> -> <expr>

@@ -4,12 +4,12 @@ import Lean.CoreM -- tests/lean/run/trace.lean
 import GAP.QuickCheck
 
 open Lean
-namespace Group
 
 open Std
 
 -- https://github.com/leanprover/lean4/blob/master/src/Std/Data/AssocList.lean#L10
 
+namespace GAP.Group
 
 abbrev Cycle := List Int
 abbrev Cycles := List Cycle

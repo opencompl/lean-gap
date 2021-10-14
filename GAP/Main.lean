@@ -18,7 +18,7 @@ open System
 def main (xs: List String): IO Unit := do
   match xs with
   | [] =>  
-      let _ <- Group.tests; return () -- run tests.
+      let _ <- GAP.Group.tests; return () -- run tests.
   | _ => do
     -- let path : System.FilePath :=  xs.head!
     let path :=  xs.head!
