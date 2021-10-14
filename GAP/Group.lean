@@ -32,43 +32,31 @@ instance : Shrinkable Permutation where
   match p with
   | Permutation.mk xs => (Shrinkable.shrink xs).map  Permutation.mk
 
+
 abbrev Set α (ord: α -> α -> Ordering) := RBMap α Unit ord
 
+def Permutation.from_cycle (cyc: List Int) : Permutation :=
+  -- | map cyc[0] -> cyc[1], cyc[1] -> cyc[2], ...
+  let adj_maps : List (Int × Int) := cyc.zip (cyc.drop 1)
+  match cyc.getLast? with
+  | Option.some last => 
+   -- map last -> head, rest
+    Permutation.mk ((last, cyc.head!)::adj_maps)
+  | Option.none => Permutation.mk [] -- permutation is empty
 
-
--- class SetLike (s: Type -> Type) where
---    setEmpty:  s a 
---    setSingleton: a -> s a
---    setUnion: s a -> s a -> s a
---    setDifference: s a -> s a -> s a
---    setIntersection: s a -> s a -> s a
---    
--- 
--- class MapLike (m: Type -> Type -> Type) where
---    mapEmpty:  m k v
---    mapInsert: k -> v -> m k v -> m k v
---    mapDelete: k -> m k v -> m k v
---    mapLookup: k -> m k v -> Option v
-   
 
 -- | action of permutation on element
-def act_ (p: List (Int × Int)) (a: Int) : Int :=
+def act_rec (p: List (Int × Int)) (a: Int) : Int :=
   match p with
   | [] => a
-  | (x,y)::ps => if x == a then y else act_ ps a
+  | (x,y)::ps => if x == a then y else act_rec ps a
 
 
-def Permutation.act(p: Permutation) (a: Int): Int := act_ p.support a
-
-def permutation_largest_moved_(p: List (Int × Int)) : Int := 
-match p with
-| [] => 0
-| (x,y)::ps => 
-    let best' := permutation_largest_moved_ ps
-    max x (max y best')
+def Permutation.act(p: Permutation) (a: Int): Int := act_rec p.support a
 
 def Permutation.largest_moved (p: Permutation): Int := 
-  permutation_largest_moved_ p.support
+match p with
+| Permutation.mk xs => xs.foldl (fun out (x, y) => max x (max y out)) 0
 
 
 -- | create range [1..n]
@@ -82,7 +70,7 @@ partial def range1n (n: Int): List Int :=
 instance : BEq Permutation where
    beq p q := 
       let n := max p.largest_moved q.largest_moved
-      (range1n n).all $ fun n => p.act n == q.act n
+      (range1n n).all $ fun i => p.act i == q.act i
 
 def Permutation.identity : Permutation := Permutation.mk []
 
@@ -97,29 +85,37 @@ def mul (p: Permutation) (q: Permutation) : Permutation :=
 def inverse (p: Permutation): Permutation := 
   Permutation.mk $ p.support.map (fun (x, y) => (y, x))
 
+-- | assumption: cycles are disjoint!
+def Permutation.from_cycles (cycs: List (List Int)): Permutation :=
+  let accum (p: Permutation) (cyc: List Int):= 
+    mul p (Permutation.from_cycle cyc) 
+  cycs.foldl accum Permutation.identity 
+
+
 partial def orbit (p: Permutation) (x: Int): Cycle := 
   let rec go (p: Permutation) (start: Int) (cur: Int) :=
-      if cur == start then [] else cur :: go p start (p.act cur)
+      if start == cur then [] else cur :: go p start (p.act cur)
   x :: go p x (p.act x)
 
 -- | compute cycle decomposiition for p, given that we are currently trying to 
 -- build cycle at (head cur_domain), are yet to process (rest cur_domain)
 -- and have seen stuff in `seen`.
 -- TODO: consider filtering cur_domain by seen?
-def cycles_ (p: Permutation) (cur_domain: List Int) (seen: List Int): Cycles :=
-match cur_domain with
+def cycles_rec (p: Permutation) (ks: List Int) (seen: List Int): Cycles :=
+match ks with
 | [] => []
-| d::ds => 
-    if  seen.elem d then cycles_ p ds seen
-    else let orb := orbit p d
-         if orb.length == 1 then (cycles_ p ds (seen ++ orb))
-         else orb :: (cycles_ p ds (seen ++ orb))
+| k::ks => 
+    if  seen.contains k then cycles_rec p ks seen
+    else let orb := orbit p k
+         if orb.length <= 1 then (cycles_rec p ks (seen ++ orb))
+         else orb :: (cycles_rec p ks (seen ++ orb))
 
 
-def cycles (p: Permutation): Cycles := cycles_ p [] []
+def cycles (p: Permutation): List (List Int) := 
+    cycles_rec p (range1n p.largest_moved) []
 
-def cycle_to_string (c: Cycle) : String := 
-  "(" ++ " ".intercalate (c.map toString) ++ ")"
+def cycle_to_string (cyc: List Int) : String := 
+  "(" ++ " ".intercalate (cyc.map toString) ++ ")"
 
 def permutation_to_string (p: Permutation) : String := 
   String.join $ (cycles p).map cycle_to_string
@@ -149,6 +145,7 @@ partial def generate_rec (gs: GeneratingSet) (cur: List Permutation): List Permu
   then cur
   else generate_rec gs (cur ++ delta)
 
+-- | this is too slow, implement better version..
 def generate (gs: GeneratingSet) : List Permutation := 
   generate_rec gs [Permutation.identity]
 
