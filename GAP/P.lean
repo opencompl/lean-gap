@@ -14,6 +14,17 @@ inductive Result (e : Type) (a : Type) : Type where
 | err: e -> Result e a
 | debugfail : e -> Result e a
 
+
+def resultBind (ma: Result e a) (a2mb: a -> Result e b): Result e b :=
+ match ma with
+ | Result.ok a => a2mb a 
+ | Result.err e => Result.err e -- TODO: accumulate errors?
+ | Result.debugfail e => Result.debugfail e
+
+instance : Monad (Result e) where
+  pure := Result.ok
+  bind := resultBind
+
 instance [Inhabited e] : Inhabited (Result e a) where
    default := Result.err (Inhabited.default) 
 

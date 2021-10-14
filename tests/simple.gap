@@ -1,3 +1,3 @@
  G := AlternatingGroup(4);
- (1,2) in G;
- (1,2,3) in G;
+ even := (1,2) in G;
+ odd := (1,2,3) in G;
