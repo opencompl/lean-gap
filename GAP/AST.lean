@@ -50,6 +50,7 @@ mutual
   | expr_var: String -> Expr
   | expr_str: String -> Expr
   | expr_not: Expr -> Expr
+  | expr_in: Expr -> Expr -> Expr -- x \in y
   | expr_assign: (lhs: String) -> (rhs: Expr) -> Expr -- stbc.gi:33 return StabChainOp( G, rec( base := base ) );
   | expr_binop: Expr -> binop_type -> Expr -> Expr
   | expr_index: (arr: Expr) -> (ix: Expr) -> Expr
@@ -59,6 +60,7 @@ mutual
   | expr_fn_defn: (params: List String) -> (is_vararg?: Bool) -> (locals: List String) ->
         (body: List Stmt) -> Expr
   inductive Stmt 
+  | stmt_expr: (lhs: Expr) -> Stmt
   | stmt_assign: (lhs: Expr) -> (rhs: Expr) -> Stmt
   | stmt_procedure_call: (fn: Expr) -> (args: List Expr) -> Stmt
   | stmt_if: (cond: Expr)
@@ -93,6 +95,7 @@ mutual
     | Expr.expr_var v => v
     | Expr.expr_str s => "\"" ++ s ++ "\""
     | Expr.expr_not x => "not(" ++ expr_to_doc x ++ ")"
+    | Expr.expr_in l r => expr_to_doc l ++ " in " ++ expr_to_doc r
     | Expr.expr_assign lhs rhs => doc lhs ++ " := " ++ expr_to_doc rhs
     | Expr.expr_binop x op y => 
       expr_to_doc x ++ " " ++ doc op ++ " " ++ expr_to_doc y
@@ -117,6 +120,7 @@ mutual
 
   partial def stmt_to_doc(s: Stmt): Doc := 
     match s with
+    | Stmt.stmt_expr e => expr_to_doc e ++ ";"
     | Stmt.stmt_assign lhs rhs =>
       expr_to_doc lhs ++ " := " ++ expr_to_doc rhs ++ ";"
     | Stmt.stmt_procedure_call fn args => 
@@ -154,7 +158,9 @@ def keywords : List String :=
    , "true", "false"
    , "and", "or", "not", "mod"
    , "function", "return", "end"
-   , "local"]
+   , "local"
+   , "in" -- hack? GAP doesn't list it as a keyword, but as some kind of parser hack.
+   ]
 
 mutual
 
@@ -183,6 +189,15 @@ mutual
 
 
     
+  -- | HACK: I don't know if this is where it really fits in!
+  partial def parse_expr_in (u: Unit) : P Expr := do
+    let l <- parse_expr_logical u
+    if (<- pkwd? "in") then do
+       pkwd! "in"
+       let r <- parse_expr u
+       return Expr.expr_in l r
+    else return l
+
   partial def parse_expr_logical (u: Unit): P Expr := do 
     let l <- parse_expr_compare u
     if (<- pkwd? "and") then do
@@ -323,14 +338,6 @@ mutual
        return Expr.expr_index arr ix
      else return arr
    
--- // expr ->
--- // expr_logical[and, or] ->
--- // expr_compare[>=, <=] ->
--- // expr_arith_add_sub[+, -] ->
--- // expr_arith_mul_div[*, /] -> 
--- // expr_exponential[^] ->
--- // expr_index["expr[index]"] ->
--- // expr_leaf
 
   partial def parse_arith_exponential (u: Unit) : P Expr := do
      let l <- parse_expr_index u
@@ -497,7 +504,7 @@ partial def parse_if (u: Unit) : P Stmt := do
 -- partial def parse_lval (u: Unit) : P Stmt := do 
 --   let var <- pident!
 
-partial def parse_assgn_or_procedure_call (u: Unit) : P Stmt := do
+partial def parse_stmt_expr_or_assign_or_procedure_call (u: Unit) : P Stmt := do
   --  let lhs <- pident! -- TODO: this seems like a hack to me.
   let lhs <- parse_expr u -- TODO: this seems like a hack to me.
   -- if (<- psym? ":=") then do
@@ -514,7 +521,10 @@ partial def parse_assgn_or_procedure_call (u: Unit) : P Stmt := do
   | Expr.expr_assign lhs rhs => do
       psym! ";"
       Stmt.stmt_assign (Expr.expr_var lhs) rhs
-  | _ => perror $ "only top level expressions allowed are calls and assignments. Found |" ++ doc lhs ++ "|"
+  | _ => 
+      psym! ";"
+      Stmt.stmt_expr lhs
+     -- perror $ "only top level expressions allowed are calls and assignments. Found |" ++ doc lhs ++ "|"
 
   
 
@@ -538,11 +548,20 @@ partial def parse_for(u: Unit): P Stmt := do
     let e <- parse_expr u
     psym! ";"
     return Stmt.stmt_return e
-  else parse_assgn_or_procedure_call u
+  else parse_stmt_expr_or_assign_or_procedure_call u
 
 
   -- | note to self: these give *worse* error messages!
-  partial def parse_expr (u: Unit): P Expr := parse_expr_logical u
+-- // expr ->
+-- // expr_in[in] -> 
+-- // expr_logical[and, or] ->
+-- // expr_compare[>=, <=] ->
+-- // expr_arith_add_sub[+, -] ->
+-- // expr_arith_mul_div[*, /] -> 
+-- // expr_exponential[^] ->
+-- // expr_index["expr[index]"] ->
+-- // expr_leaf
+  partial def parse_expr (u: Unit): P Expr := parse_expr_in u
 
   end
 
