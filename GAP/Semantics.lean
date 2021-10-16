@@ -75,7 +75,8 @@ inductive StepExpr: Env -> Expr -> Val -> Prop :=
 | step_expr_permutation: (env: Env)
    -> (vs: List Val)
    -> (es: List Expr)
-   -> StepExpr env (expr_permutation p) (val_perm (Permutation.mk []))
+   -- | TODO: need to unwrap the vals as ints etc.
+   -> StepExpr env (expr_permutation p) (val_perm (Permutation.identity ))
 | step_expr_call_An: (env: Env) 
   -> (n: Int) 
   -- | hacked up notion of alternating group construction

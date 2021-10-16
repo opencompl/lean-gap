@@ -15,6 +15,11 @@ def testResultBind (ma: TestResult α) (a2mb: α -> TestResult β): TestResult �
   | TestResult.success a => a2mb a
   | TestResult.failure f => TestResult.failure f
 
+def TestResult.failure? {α: Type} (t: TestResult α): Bool := 
+  match t with
+  | success _ => false
+  | failure _ => true
+
 instance : Monad TestResult where
   pure  := testResultPure
   bind := testResultBind
