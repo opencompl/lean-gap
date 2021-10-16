@@ -95,6 +95,7 @@ def replicateM  {m : Type → Type} [Monad m] {α : Type}  (n: Nat) (ma : m α):
       let as <- replicateM n' ma
       return a :: as
 
+-- | inclusive
 def randListM (minSize: Nat) (maxSize: Nat) (gen: Rand α) : Rand (List α)  := do
   let n <- randNatM minSize maxSize
   replicateM n gen
@@ -103,7 +104,7 @@ def randListM (minSize: Nat) (maxSize: Nat) (gen: Rand α) : Rand (List α)  := 
 -- | randomly choose one of
 def randOneOf [Inhabited α] (xs: List α): Rand α := do
   let maxIx := xs.length - 1
-  let randIx <- randNatM 0 maxIx
+  let randIx <- randNatM 0 (maxIx - 1)
   return xs.get! randIx
 
 

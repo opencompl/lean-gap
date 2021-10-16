@@ -306,7 +306,7 @@ def schrier_decomposition(gs:  GeneratingSet) : List (GeneratingSet) :=
 
 partial def rand_permutation (n: Int): Rand Permutation := do
    let rec go (i: Int) (unseen: List Int): Rand (List (Int × Int)) := do
-     if i == n + 1 then return []
+     if i == n then return []
      else do
        let r <- randOneOf unseen
        let unseen := List.filter (fun v => v != r) unseen
@@ -368,11 +368,11 @@ def test_stabilizer_coset_reps_slow: IO (TestResult Unit) :=
 
     if result.failure?
     then result
-    else 
-        -- | check that union of all cosets is the fulll H
-        let union_cosets : Set Permutation compare := 
-            orb_and_cosets.fold (fun out o h => RBMap.set_union out h) (RBMap.set_empty compare)
-        union_cosets =?= H
+    
+    -- | check that union of all cosets is the fulll H
+    let union_cosets : Set Permutation compare := 
+        orb_and_cosets.fold (fun out o h => RBMap.set_union out h) (RBMap.set_empty compare)
+    union_cosets =?= H
 
 
 -- | test that we compute the generators of the stabilizer correctly
