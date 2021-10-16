@@ -190,6 +190,9 @@ def RBMap.set_insert {α: Type} {compare: α -> α -> Ordering} (as: Set α comp
 def RBMap.set_union {α: Type} {compare: α -> α -> Ordering} (s1 s2: Set α compare): Set α compare := 
    s1.fold (fun out k () => RBMap.set_insert out k) s2
 
+def RBMap.set_to_list {α: Type} {compare: α -> α -> Ordering} (as: Set α compare): List α := 
+    (RBMap.toList as).map (fun (a, ()) => a)
+
 -- filter seems expensive?
 def RBMap.set_filter {α: Type} (p: α → Bool)
     {compare: α -> α -> Ordering} (as: Set α compare): Set α compare := do
@@ -368,11 +371,11 @@ def test_stabilizer_coset_reps_slow: IO (TestResult Unit) :=
 
     if result.failure?
     then result
-    
-    -- | check that union of all cosets is the fulll H
-    let union_cosets : Set Permutation compare := 
-        orb_and_cosets.fold (fun out o h => RBMap.set_union out h) (RBMap.set_empty compare)
-    union_cosets =?= H
+    else 
+        -- | check that union of all cosets is the fulll H
+        let union_cosets : Set Permutation compare := 
+            orb_and_cosets.fold (fun out o h => RBMap.set_union out h) (RBMap.set_empty compare)
+        union_cosets =?= H
 
 
 -- | test that we compute the generators of the stabilizer correctly
