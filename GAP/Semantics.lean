@@ -59,9 +59,9 @@ def val_An (n: Int): Val := do
   for (i: Nat) in List.range (n.toNat + 1) do 
     gs := RBMap.set_insert gs (Permutation.from_cycle [0, 1, i])
   return Val.val_group gs
-  
+
 -- | environment
-abbrev Env := AssocList String Val
+abbrev Env := RBMap String Val compare
 
 
 -- | inductive proposition modelling smallstep
@@ -101,7 +101,7 @@ inductive StepStmt: Env -> Stmt -> Env -> Prop :=
     -> (rhs: Expr)
     -> (v: Val)
     -> (RHS: StepExpr env rhs v)
-    -> StepStmt env (stmt_assign (expr_var lhs) rhs) (env.cons lhs v)
+    -> StepStmt env (stmt_assign (expr_var lhs) rhs) (env.insert lhs v)
 
 
 
@@ -139,11 +139,11 @@ partial def execute_stmt (env: Env) (s: Stmt): Result Doc Env :=
 match s with
 | stmt_assign (expr_var lhs) rhs => do
     let vrhs <- execute_expr env rhs
-    return env.cons lhs vrhs
+    return env.insert lhs vrhs
 | s => Result.err $ vgroup ["unhandled stmt:", doc s]
 
 
-def init_env : Env := AssocList.empty
+def init_env : Env := RBMap.empty
 
 def assoc_list_to_list (xs: AssocList α β): List (α × β) :=
   match xs with
@@ -151,13 +151,11 @@ def assoc_list_to_list (xs: AssocList α β): List (α × β) :=
   | AssocList.cons k v xs => (k,v)::assoc_list_to_list xs
 
 instance : Pretty Env where
-  doc := fun env =>  
-    let doc_kv : String × Val → Doc := 
-      fun (k, v) => doc k ++ " := " ++ doc v
-    let env_list : List (String × Val)
-      := assoc_list_to_list env
-    vgroup $ env_list.map doc_kv
-
+  doc (env: Env) := do
+    let mut docs: List Doc := []  
+    for (k, v) in env do
+      docs := docs ++ [doc k ++ " := " ++ doc v]
+    return Doc.vgroup docs
 
 partial def execute_stmts 
    (env: Env) (s: List Stmt) : Result Doc Env :=
