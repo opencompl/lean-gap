@@ -190,6 +190,11 @@ def RBMap.set_insert {α: Type} {compare: α -> α -> Ordering} (as: Set α comp
 def RBMap.set_union {α: Type} {compare: α -> α -> Ordering} (s1 s2: Set α compare): Set α compare := 
    s1.fold (fun out k () => RBMap.set_insert out k) s2
 
+-- 
+def RBMap.union_keep_right {α: Type} {compare: α -> α -> Ordering}
+    (s1 s2: RBMap α  β compare): RBMap α  β compare := 
+   s1.fold (fun out k v => out.insert k v) s2
+
 def RBMap.set_to_list {α: Type} {compare: α -> α -> Ordering} (as: Set α compare): List α := 
     (RBMap.toList as).map (fun (a, ()) => a)
 
@@ -220,25 +225,26 @@ def fst (x: α × β) : α :=  match x with | (a, _) => a
 def snd (x: α × β) : β :=  match x with | (_, b) => b
 
 -- | map element in the orbit to the element that created it.
--- partial def generating_set_orbit_rec(gs: GeneratingSet) 
---    (frontier: RBMap Int Permutation compare)
---    (out: RBMap Int Permutation compare): RBMap Int Permutation compare :=
---   -- | expand the BFS frontier
---   let frontier: RBMap Int Permutation compare := RBMap.empty
---     -- for f in frontier do
---         
---   if frontier.isEmpty
---   then out
---   else RBMap.empty
---   else generating_set_orbit_rec gs frontier (out ++ frontier)
+partial def generating_set_orbit_rec(gs: GeneratingSet) 
+    (frontier: RBMap Int Permutation compare)
+    (out: RBMap Int Permutation compare): RBMap Int Permutation compare := do
+    let mut frontier' : RBMap Int Permutation compare := RBMap.empty
 
+    for (i, p) in frontier do
+        for (g, ()) in gs do -- TODO: create ADT set.
+            let (i', p') := (g.act i, mul g p)
+            if RBMap.contains out i'
+            then continue -- skip already seen elements
+            else frontier' := frontier'.insert i' p'  
 
+    if frontier'.isEmpty
+    then out
+    else generating_set_orbit_rec gs frontier (RBMap.union_keep_right out frontier)
 
 -- | compute the orbit of an element under a generating set
 def GeneratingSet.orbit (gs: GeneratingSet) (k: Int): RBMap Int Permutation compare :=
-  sorry
-  -- let frontier := RBMap.fromList [(k, Permutation.identity)] compare
-  -- generating_set_orbit_rec gs frontier frontier
+  let frontier := RBMap.fromList [(k, Permutation.identity)] compare
+  generating_set_orbit_rec gs frontier frontier
 
 
 --  we have a group G = <gs>
@@ -268,40 +274,31 @@ def GeneratingSet.orbit (gs: GeneratingSet) (k: Int): RBMap Int Permutation comp
 --  Rather, we need the generators to be: < (gs * os).map(remove_defect) >
 --  For whatever reason, we must take all pairs of gs, os!
 def GeneratingSet.stabilizer_subgroup_generators 
- (gs: GeneratingSet) (k: Int) : GeneratingSet :=  sorry
-  -- -- | treat these as representatives of stabilizer cosets.
-  -- let orbit : RBMap Int Permutation compare := gs.orbit k
-  -- let purify (o: Int) (g: Permutation) : Permutation :=
-  --      let orep := (orbit.find! o)
-  --      mul g (inverse orep) -- remove the part of `g` that causes it to move `k` to `o`.
-  -- -- | augment gs with information of where in the orbit it lies
-  -- -- let gs : RBMap Int Permutation := 
-  -- --   RBMap.fromList (gs.map (fun g => (g.act k, g))) compare
-  -- let mut genset : GeneratingSet = RBMap.empty
+ (gs: GeneratingSet) (k: Int) : GeneratingSet :=  do
+    -- | treat these as representatives of stabilizer cosets.
+    let orbit : RBMap Int Permutation compare := gs.orbit k
+    let purify (g: Permutation) : Permutation :=
+        let orep := (orbit.find! (g.act k))
+        mul g (inverse orep) -- remove the part of `g` that causes it to move `k` to `o`.
 
-  -- for (g, ()) in gs do
-  --   for (_, h) in orbit do
-  --     let gh := g * h
-  --     let repr := RBMap.find (gh.act k)
-  --     genset := RBMap.insert genset purify 
-  --     
-  --     
-  -- -- let out := genset.map (fun (o, g) => purify o g)
-  -- -- | remove duplicates here?
-  -- -- List.eraseDups out
+    let mut out : GeneratingSet := RBMap.set_empty compare -- TODO: make compare implicit arg
+    for (g, ()) in gs do
+        for (_, p) in orbit do 
+            let gp := mul g p
+            out := RBMap.set_insert out (purify gp)
+    return out
 
-
--- partial def schrier_decomposition_rec 
---   (gs:  GeneratingSet) (k: Int): List (GeneratingSet) := 
---    if gs == RBMap.set_singleton Permutation.identity compare
---    then [gs]
---    else 
---      let stab : GeneratingSet := gs.stabilizer_subgroup_generators  k
---      gs :: schrier_decomposition_rec stab (k+1)
+partial def schrier_decomposition_rec 
+  (gs:  GeneratingSet) (k: Int): List (GeneratingSet) := 
+   if gs == RBMap.set_singleton Permutation.identity compare
+   then [gs]
+   else 
+     let stab : GeneratingSet := gs.stabilizer_subgroup_generators  k
+     gs :: schrier_decomposition_rec stab (k+1)
 
 
 def schrier_decomposition(gs:  GeneratingSet) : List (GeneratingSet) := 
-  sorry -- schrier_decomposition_rec gs 0
+    schrier_decomposition_rec gs 0
 
 
 
