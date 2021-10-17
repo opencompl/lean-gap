@@ -358,10 +358,26 @@ def test_permutation_group_id: IO (TestResult Unit) := do
       (mul Permutation.identity p) =?= p
 
 
-def intersects? {α: Type} [BEq α]  (as: List α) (as': List α) := 
- match as with
- | [] => false
- | a::as => if as'.contains a then true else intersects? as as'
+-- | return true if these two maps share a (k, v) pair
+def RBMap.set_intersects?
+    {compare: α -> α -> Ordering}
+    (as: Set α compare) (as': Set α compare) : Bool := do
+    for (k, ()) in as do
+        match RBMap.find? as' k with
+        | some () => return True
+        | none => continue
+    return false
+
+def RBMap.set_intersect
+    {compare: α -> α -> Ordering}
+    (as: Set α compare) (as': Set α compare) : Set α compare := do
+    let mut out : Set α compare := RBMap.set_empty compare
+    for (k, ()) in as do
+        match RBMap.find? as' k with
+        | some () => out := RBMap.set_insert out k
+        | none => continue
+    return out
+
 
 -- | test that orbit 
 def test_orbit: IO (TestResult Unit) := 
@@ -372,25 +388,19 @@ def test_orbit: IO (TestResult Unit) :=
     for (i, p) in orb_and_perms do
          p.act k =?= i
     return ()
-    
-    -- -- | check that union of all cosets is the full H
-    -- let union_cosets : Set Permutation compare := 
-    --     orb_and_cosets.fold (fun out o h => RBMap.set_union out h) (RBMap.set_empty compare)
-    -- union_cosets =?= H
-
 
 
 -- | test that we compute orbit permutation elements correctly by checking that 
 -- | their cosets are indeed cosets
 def test_stabilizer_coset_reps_slow: IO (TestResult Unit) := 
-    testRandom (ntests := 10) "stabilizer coset representatives" 
-      (rand2 (randListM 1 5 $ rand_permutation 5) (randIntM 1 5)) fun ((ps, k): List Permutation × Int) => do
-    let H := generate (RBMap.set_from_list ps compare) -- exhaustive generate group
- 
-    let Stab := RBMap.set_filter (fun h => h.act k == k) H -- exhaustively create stabilizer
+    testRandom (ntests := 100) "stabilizer coset representatives" 
+      (rand2 (randSetM 1 5 $ rand_permutation 5) (randIntM 1 5)) fun ((ps, k): Set Permutation compare × Int) => do
+    let H := generate ps
+    let Stab : Set Permutation compare := 
+        RBMap.set_filter (fun h => h.act k == k) H -- exhaustively create stabilizer
 
     let orb_and_perms : RBMap Int Permutation compare := 
-         GeneratingSet.orbit (RBMap.set_from_list ps compare) k 
+         GeneratingSet.orbit ps k 
 
     -- | map each element k' in the orbit [k--p-->k'] to its coset representatve pH
     -- v slow to map? slow to build?
@@ -399,21 +409,18 @@ def test_stabilizer_coset_reps_slow: IO (TestResult Unit) :=
         orb_and_cosets := orb_and_cosets.insert i (RBMap.set_map H (fun h => mul p h))
 
     let mut result : TestResult Unit := TestResult.success ()
-    for (i, Stabi) in orb_and_cosets do
-        for(j, Stabj) in orb_and_cosets do
+    for (i, p) in orb_and_perms do
+        for(j, q) in orb_and_perms do
             if j <= i  then continue
-            if intersects? (RBMap.toList Stabi) (RBMap.toList Stabj) then
-                result := TestResult.failure $ "cosets must have empty intersection"
+            let i_coset : Set Permutation compare := RBMap.set_map Stab (fun s => mul p s)
+            let j_coset : Set Permutation compare := RBMap.set_map Stab (fun s => mul q s)
+            if RBMap.set_intersects? i_coset j_coset
+            then 
+                result := TestResult.failure $ 
+                    "stabilizer coset intersection " ++ toString p ++ ", " ++ toString q
                 break
         if result.failure? then break
-
-    if result.failure? then result
-    
-    
-    -- -- | check that union of all cosets is the full H
-    -- let union_cosets : Set Permutation compare := 
-    --     orb_and_cosets.fold (fun out o h => RBMap.set_union out h) (RBMap.set_empty compare)
-    -- union_cosets =?= H
+    result
 
 
 -- | test that we compute the generators of the stabilizer correctly
