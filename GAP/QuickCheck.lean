@@ -164,6 +164,9 @@ def minimizeCounterexample [Shrinkable α] (a: α) (p: α -> TestResult Unit): �
 
 -- | return some () on success.
 -- TODO: rewrite with liftM and monad transformers.
+-- | TODO: change type to 
+-- | RandT TestResult unit, so that we can use the free monad to make the API
+-- look much more natural?
 def testRandom [ToString α] [Shrinkable α] 
    (name: String) (ra: Rand α) (p: α -> TestResult Unit) (ntests : Nat := 120): IO (TestResult Unit) := do
    let rec go (n: Nat) : RandIO (TestResult Unit) :=  do
