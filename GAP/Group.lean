@@ -246,8 +246,8 @@ partial def generating_set_orbit_rec (gs: GeneratingSet)
     (frontier: RBMap Int Permutation compare)
     (out: RBMap Int Permutation compare): RBMap Int Permutation compare := do
 
-    let mut frontier' : RBMap Int Permutation compare := RBMap.empty
-    let mut out' := out
+    let mut frontier' : RBMap Int Permutation compare := RBMap.empty -- new frontier set.
+    let mut out' := out -- new out set
 
     for (i, p) in frontier do
         for (g, ()) in gs do -- TODO: create ADT set.
@@ -260,13 +260,12 @@ partial def generating_set_orbit_rec (gs: GeneratingSet)
 
     if frontier'.isEmpty
     then out'
-    else generating_set_orbit_rec gs frontier out'
+    else generating_set_orbit_rec gs frontier' out'
 
 -- | compute the orbit of an element under a generating set
 def GeneratingSet.orbit (gs: GeneratingSet) (k: Int): RBMap Int Permutation compare :=
   let frontier := RBMap.fromList [(k, Permutation.identity)] compare
-  generating_set_orbit_rec gs frontier (RBMap.empty)
-  -- frontier
+  generating_set_orbit_rec gs frontier frontier
 
 
 --  we have a group G = <gs>
@@ -301,13 +300,12 @@ def GeneratingSet.stabilizer_subgroup_generators
     let orbit : RBMap Int Permutation compare := gs.orbit k
     let purify (g: Permutation) : Permutation :=
         let orep := (orbit.find! (g.act k))
-        mul g (inverse orep) -- remove the part of `g` that causes it to move `k` to `o`.
+        mul  (inverse orep) g -- remove the part of `g` that causes it to move `k` to `o`.
 
     let mut out : GeneratingSet := RBMap.set_empty compare -- TODO: make compare implicit arg
     for (g, ()) in gs do
         for (_, p) in orbit do 
-            let gp := mul g p
-            out := RBMap.set_insert out (purify gp)
+            out := RBMap.set_insert out (purify (mul g p))
     return out
 
 partial def schrier_decomposition_rec 
@@ -391,7 +389,7 @@ def test_orbit: IO (TestResult Unit) :=
 
 
 -- | test that we compute orbit permutation elements correctly by checking that 
--- | their cosets are indeed cosets
+-- | their cosets are indeed cosets (ie, disjoint)
 def test_stabilizer_coset_reps_slow: IO (TestResult Unit) := 
     testRandom (ntests := 100) "stabilizer coset representatives" 
       (rand2 (randSetM 1 5 $ rand_permutation 5) (randIntM 1 5)) fun ((ps, k): Set Permutation compare × Int) => do
@@ -426,15 +424,13 @@ def test_stabilizer_coset_reps_slow: IO (TestResult Unit) :=
 -- | test that we compute the generators of the stabilizer correctly
 def test_generators_of_stabilizer: IO (TestResult Unit) :=
   testRandom (ntests := 10) "generators of stabilizer" 
-      (rand2 (randListM 1 5 $ rand_permutation 5) (randIntM 1 5)) fun ((ps, k): List Permutation × Int) => do
+      (rand2 (randSetM 1 5 $ rand_permutation 5) (randIntM 1 5)) fun ((ps, k): Set Permutation compare  × Int) => do
         -- | TODO: write rand_set
-        let ps := RBMap.set_from_list ps compare
         let G := generate ps
         let stab_exhaustive := RBMap.set_filter (fun g => g.act k == k) G 
         let stab_generated := generate (GeneratingSet.stabilizer_subgroup_generators ps k)
         -- | TODO: add toString for Set
         stab_exhaustive =?= stab_generated
-
 
 -- | actually I need monad transformer
 def tests: IO (TestResult Unit) := do
@@ -442,7 +438,7 @@ def tests: IO (TestResult Unit) := do
   let _ <- test_permutation_group_assoc
   let _ <- test_orbit
   let _ <- test_stabilizer_coset_reps_slow
-  -- let _ <- test_generators_of_stabilizer
+  let _ <- test_generators_of_stabilizer
   test_permutation_group_id
 
 
