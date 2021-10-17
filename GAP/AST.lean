@@ -74,6 +74,9 @@ mutual
   end
   -- TODO: add while
 
+instance : Inhabited Expr where
+  default := Expr.expr_str "EXPR INHABITED"
+
 instance : Coe (List Stmt) Block where
    coe (xs: List Stmt) := Block.mk xs
 

@@ -75,10 +75,13 @@ inductive StepExpr: Env -> Expr -> Val -> Prop :=
   -> (i: Int) 
   -> StepExpr env (expr_int i) (val_int i)
 | step_expr_permutation: (env: Env)
-   -> (vs: List Val)
-   -> (es: List Expr)
+   -> (ess: List (List Expr))
+   -> (ess_val: List (List Int))
+   -> (ES: forall i j, (INBOUNDSI: i < ess.length) -> 
+        (INBOUNDSJ: j < (ess.get! i).length) -> 
+        StepExpr env ((ess.get! i).get! j) (Val.val_int ((ess_val.get! i).get! j)))
    -- | TODO: need to unwrap the vals as ints etc.
-   -> StepExpr env (expr_permutation p) (val_perm (Permutation.identity ))
+   -> StepExpr env (expr_permutation ess) (val_perm (Permutation.from_cycles ess_val))
 | step_expr_call_An: (env: Env) 
   -> (n: Int) 
   -- | hacked up notion of alternating group construction
@@ -144,11 +147,6 @@ match s with
 
 
 def init_env : Env := RBMap.empty
-
-def assoc_list_to_list (xs: AssocList α β): List (α × β) :=
-  match xs with
-  | AssocList.nil => []
-  | AssocList.cons k v xs => (k,v)::assoc_list_to_list xs
 
 instance : Pretty Env where
   doc (env: Env) := do
