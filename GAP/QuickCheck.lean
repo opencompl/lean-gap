@@ -79,6 +79,7 @@ def rand3 (ra: Rand α) (rb: Rand β) (rc: Rand γ) : Rand (α × β × γ) := d
   return (a, b, c)
 
         
+-- | random natural in range [lo..hi]
 def randNatM (lo: Nat) (hi: Nat) : Rand Nat := 
   fun gen => randNat gen lo hi 
 
@@ -104,7 +105,7 @@ def randListM (minSize: Nat) (maxSize: Nat) (gen: Rand α) : Rand (List α)  := 
 -- | randomly choose one of
 def randOneOf [Inhabited α] (xs: List α): Rand α := do
   let maxIx := xs.length - 1
-  let randIx <- randNatM 0 (maxIx - 1)
+  let randIx <- randNatM 0 maxIx
   return xs.get! randIx
 
 
@@ -179,8 +180,8 @@ def testRandom [ToString α] [Shrinkable α]
                  go n' 
            | TestResult.failure err => do
               let (a, err) := minimizeCounterexample a p
-              liftIO2RandIO $ IO.eprintln $ "\nfailed test [" ++ toString (ntests - n + 1) ++ "] at counter-example:" 
-              liftIO2RandIO $ IO.eprintln $ toString a
+              liftIO2RandIO $ IO.eprintln $ "\nfailed test [" ++ toString (ntests - n + 1) ++ "]:" 
+              -- liftIO2RandIO $ IO.eprintln $ toString a
               liftIO2RandIO $ IO.eprintln $ err
               let _ <- go n'
               return TestResult.failure err

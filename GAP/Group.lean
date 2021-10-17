@@ -25,7 +25,6 @@ instance [BEq α ] [BEq β] {compare: α -> α -> Ordering}: BEq (RBMap α β co
 abbrev Set (α : Type) (compare: α -> α -> Ordering) := RBMap α Unit compare
 
 
-
 inductive Permutation where 
 | mk: RBMap Int Int (compare) -> Permutation
 
@@ -85,26 +84,26 @@ instance : Ord Permutation where
     compare := permutation_lex_order
 
 
--- | create range [1..n]
--- | TODO: move to [1..n], currently at [0..n]!
-partial def range1n (n: Int): List Int := 
+-- | create range [0..n]
+partial def range_le_n (n: Int): List Int := 
+  -- go i has list [0..i)
   let rec go (i: Int) (acc: List Int) : List Int :=
-    if i == n then acc
+    if i > n then acc
     else go (i + 1) (i::acc)
   go 0 []
-
 
 instance : BEq Permutation where
    beq p q := 
       let n := max p.largest_moved q.largest_moved
-      (range1n n).all $ fun i => p.act i == q.act i
+      (range_le_n n).all $ fun i => p.act i == q.act i
 
 
 def Permutation.identity : Permutation := Permutation.mk RBMap.empty
 
+-- act (mul p q) x = act p (act q x)
 def mul (p: Permutation) (q: Permutation) : Permutation :=
   let n := max p.largest_moved q.largest_moved
-  let xs := range1n n
+  let xs := range_le_n n
   Permutation.mk $ RBMap.fromList (xs.map fun x => (x, p.act (q.act x))) compare
 
 def inverse (p: Permutation): Permutation := 
@@ -190,6 +189,17 @@ def RBMap.set_insert {α: Type} {compare: α -> α -> Ordering} (as: Set α comp
 def RBMap.set_union {α: Type} {compare: α -> α -> Ordering} (s1 s2: Set α compare): Set α compare := 
    s1.fold (fun out k () => RBMap.set_insert out k) s2
 
+partial def randSetM (minSize: Nat) (maxSize: Nat) (ra: Rand α)  {compare: α -> α -> Ordering}:
+    Rand (Set α compare) := do 
+   let size <- randIntM minSize maxSize
+   let rec go (s: Set α compare) := 
+    if s.size == size
+    then return s
+    else do 
+        let a <- ra
+        go (RBMap.set_insert s a) 
+    go (RBMap.set_empty compare)
+
 -- 
 def RBMap.union_keep_right {α: Type} {compare: α -> α -> Ordering}
     (s1 s2: RBMap α  β compare): RBMap α  β compare := 
@@ -208,14 +218,21 @@ def RBMap.set_filter {α: Type} (p: α → Bool)
     return out
 
 -- | generate all permutations from the generating set
-partial def generate_rec (gs: GeneratingSet) (cur: Set Permutation compare): Set Permutation compare := 
-  let next := RBMap.set_bind gs (fun g => RBMap.set_map cur (mul g))
-  let delta := RBMap.set_subtract next cur
-  if delta.isEmpty
-  then cur
-  else generate_rec gs next
+partial def generate_rec (gs: GeneratingSet) (out: Set Permutation compare): Set Permutation compare := do
+  let mut next := out
+  let mut changed : Bool := False
+  for (h, ()) in out do
+     for (g, ()) in gs do
+       let gh := mul g h
+       if RBMap.contains next gh
+       then continue
+       else do
+          changed := True 
+          next := RBMap.set_insert next gh
+  if changed
+  then generate_rec gs next
+  else next
 
---   else generate_rec gs (RBMap.set_union cur ++ delta)
 
 -- | this is too slow, implement better version..
 def generate (gs: GeneratingSet) : Set Permutation compare := 
@@ -225,26 +242,31 @@ def fst (x: α × β) : α :=  match x with | (a, _) => a
 def snd (x: α × β) : β :=  match x with | (_, b) => b
 
 -- | map element in the orbit to the element that created it.
-partial def generating_set_orbit_rec(gs: GeneratingSet) 
+partial def generating_set_orbit_rec (gs: GeneratingSet) 
     (frontier: RBMap Int Permutation compare)
     (out: RBMap Int Permutation compare): RBMap Int Permutation compare := do
+
     let mut frontier' : RBMap Int Permutation compare := RBMap.empty
+    let mut out' := out
 
     for (i, p) in frontier do
         for (g, ()) in gs do -- TODO: create ADT set.
             let (i', p') := (g.act i, mul g p)
-            if RBMap.contains out i'
+            if out'.contains i'
             then continue -- skip already seen elements
-            else frontier' := frontier'.insert i' p'  
+            else
+               out' := out'.insert i' p' 
+               frontier' := frontier'.insert i' p'  
 
     if frontier'.isEmpty
-    then out
-    else generating_set_orbit_rec gs frontier (RBMap.union_keep_right out frontier)
+    then out'
+    else generating_set_orbit_rec gs frontier out'
 
 -- | compute the orbit of an element under a generating set
 def GeneratingSet.orbit (gs: GeneratingSet) (k: Int): RBMap Int Permutation compare :=
   let frontier := RBMap.fromList [(k, Permutation.identity)] compare
-  generating_set_orbit_rec gs frontier frontier
+  generating_set_orbit_rec gs frontier (RBMap.empty)
+  -- frontier
 
 
 --  we have a group G = <gs>
@@ -306,18 +328,19 @@ def schrier_decomposition(gs:  GeneratingSet) : List (GeneratingSet) :=
 
 partial def rand_permutation (n: Int): Rand Permutation := do
    let rec go (i: Int) (unseen: List Int): Rand (List (Int × Int)) := do
-     if i == n then return []
-     else do
+    if unseen.isEmpty then return []
+    else
        let r <- randOneOf unseen
        let unseen := List.filter (fun v => v != r) unseen
        let rest <- go (i+1) unseen
-        return (i, r)::rest
-   let xs := range1n n
+       return (i, r)::rest
+   let xs := range_le_n n
    let shuffled <- go 0 xs
    return Permutation.mk (RBMap.fromList shuffled compare) 
 
 def test_permutation_group_inverse: IO (TestResult Unit) :=
     testRandom "p * inv p == id"  (rand_permutation 5) $ fun (p: Permutation) => do
+    --   p =?= inverse p
       (mul p (inverse p)) =?= Permutation.identity
 
 def test_permutation_group_assoc: IO (TestResult Unit) :=
@@ -340,6 +363,22 @@ def intersects? {α: Type} [BEq α]  (as: List α) (as': List α) :=
  | [] => false
  | a::as => if as'.contains a then true else intersects? as as'
 
+-- | test that orbit 
+def test_orbit: IO (TestResult Unit) := 
+    testRandom (ntests := 10) "orbit" 
+      (rand2 (randSetM 1 5 $ rand_permutation 5) (randIntM 1 5)) fun ((ps, k): Set Permutation compare × Int) => do
+    let orb_and_perms : RBMap Int Permutation compare := GeneratingSet.orbit ps k 
+
+    for (i, p) in orb_and_perms do
+         p.act k =?= i
+    return ()
+    
+    -- -- | check that union of all cosets is the full H
+    -- let union_cosets : Set Permutation compare := 
+    --     orb_and_cosets.fold (fun out o h => RBMap.set_union out h) (RBMap.set_empty compare)
+    -- union_cosets =?= H
+
+
 
 -- | test that we compute orbit permutation elements correctly by checking that 
 -- | their cosets are indeed cosets
@@ -347,32 +386,34 @@ def test_stabilizer_coset_reps_slow: IO (TestResult Unit) :=
     testRandom (ntests := 10) "stabilizer coset representatives" 
       (rand2 (randListM 1 5 $ rand_permutation 5) (randIntM 1 5)) fun ((ps, k): List Permutation × Int) => do
     let H := generate (RBMap.set_from_list ps compare) -- exhaustive generate group
+ 
     let Stab := RBMap.set_filter (fun h => h.act k == k) H -- exhaustively create stabilizer
-    let orb_and_perms : RBMap Int Permutation compare := 
-        GeneratingSet.orbit (RBMap.set_from_list ps compare) k 
 
-    -- -- -- | map each element k' in the orbit [k--p-->k'] to its coset representatve pH
+    let orb_and_perms : RBMap Int Permutation compare := 
+         GeneratingSet.orbit (RBMap.set_from_list ps compare) k 
+
+    -- | map each element k' in the orbit [k--p-->k'] to its coset representatve pH
     -- v slow to map? slow to build?
     let mut orb_and_cosets : RBMap Int (Set Permutation compare) compare := RBMap.empty
     for (i, p) in orb_and_perms do 
         orb_and_cosets := orb_and_cosets.insert i (RBMap.set_map H (fun h => mul p h))
 
     let mut result : TestResult Unit := TestResult.success ()
-    let l := orb_and_cosets.size-1
     for (i, Stabi) in orb_and_cosets do
         for(j, Stabj) in orb_and_cosets do
-            if intersects? (RBMap.toList Stabi) (RBMap.toList Stabi) then
-                result := TestResult.failure "cosets must have empty intersection"
+            if j <= i  then continue
+            if intersects? (RBMap.toList Stabi) (RBMap.toList Stabj) then
+                result := TestResult.failure $ "cosets must have empty intersection"
                 break
         if result.failure? then break
 
-    if result.failure?
-    then result
+    if result.failure? then result
     
-    -- | check that union of all cosets is the fulll H
-    let union_cosets : Set Permutation compare := 
-        orb_and_cosets.fold (fun out o h => RBMap.set_union out h) (RBMap.set_empty compare)
-    union_cosets =?= H
+    
+    -- -- | check that union of all cosets is the full H
+    -- let union_cosets : Set Permutation compare := 
+    --     orb_and_cosets.fold (fun out o h => RBMap.set_union out h) (RBMap.set_empty compare)
+    -- union_cosets =?= H
 
 
 -- | test that we compute the generators of the stabilizer correctly
@@ -392,8 +433,9 @@ def test_generators_of_stabilizer: IO (TestResult Unit) :=
 def tests: IO (TestResult Unit) := do
   let _ <- test_permutation_group_inverse
   let _ <- test_permutation_group_assoc
+  let _ <- test_orbit
   let _ <- test_stabilizer_coset_reps_slow
-  let _ <- test_generators_of_stabilizer
+  -- let _ <- test_generators_of_stabilizer
   test_permutation_group_id
 
 
