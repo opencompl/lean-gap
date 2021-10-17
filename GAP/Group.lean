@@ -308,22 +308,35 @@ def GeneratingSet.stabilizer_subgroup_generators
             out := RBMap.set_insert out (purify (mul g p))
     return out
 
+
+-- | cmputes stab gs [0..k] :: schrier_decomposition_rec gs (k+1)
 partial def schrier_decomposition_rec 
   (gs:  GeneratingSet) (k: Int): List (GeneratingSet) := 
    if gs == RBMap.set_singleton Permutation.identity compare
    then [gs]
    else 
-     let stab : GeneratingSet := gs.stabilizer_subgroup_generators  k
-     gs :: schrier_decomposition_rec stab (k+1)
+     let stab : GeneratingSet := gs.stabilizer_subgroup_generators k
+     stab :: schrier_decomposition_rec stab (k+1)
 
-
+-- | produces schrier decomposition, where first element is
+-- | G = Stab([0..-1])
+-- second element is subgrop of G which is stab([0..0]), and so on.
+-- last element is {e} = Stab[0..n].
 def schrier_decomposition(gs:  GeneratingSet) : List (GeneratingSet) := 
-    schrier_decomposition_rec gs 0
+    schrier_decomposition_rec gs (-1)
 
-
+def schrier_order (gs: GeneratingSet): Int := do 
+    let sch := schrier_decomposition gs
+    let mut size := 1
+    let mut ix := -1 -- we stabilize [0..ix]
+    for stab_le_ix in sch do
+        -- | we stabilize [0..ix], so we should find size of orbit of (ix + 1), smallest
+        -- thing we do move.
+        size := size * (GeneratingSet.orbit stab_le_ix (ix + 1)).size
+        ix := ix + 1
+    return size
 
 -- | generate a random permutation of [1..n] with fisher yates 
-
 partial def rand_permutation (n: Int): Rand Permutation := do
    let rec go (i: Int) (unseen: List Int): Rand (List (Int × Int)) := do
     if unseen.isEmpty then return []
@@ -432,6 +445,15 @@ def test_generators_of_stabilizer: IO (TestResult Unit) :=
         -- | TODO: add toString for Set
         stab_exhaustive =?= stab_generated
 
+def test_schrier_order: IO (TestResult Unit) :=
+  testRandom (ntests := 10) "test order computation using schrier decomposition" 
+      ((randSetM 1 5 $ rand_permutation 5)) fun (ps: Set Permutation compare) => do
+        -- | TODO: write rand_set
+        let G := generate ps
+        let order_exhaustive := (generate ps).size
+        let order_fast := schrier_order ps
+        Int.ofNat order_exhaustive =?= order_fast
+
 -- | actually I need monad transformer
 def tests: IO (TestResult Unit) := do
   let _ <- test_permutation_group_inverse
@@ -439,6 +461,7 @@ def tests: IO (TestResult Unit) := do
   let _ <- test_orbit
   let _ <- test_stabilizer_coset_reps_slow
   let _ <- test_generators_of_stabilizer
+  let _ <- test_schrier_order
   test_permutation_group_id
 
 
