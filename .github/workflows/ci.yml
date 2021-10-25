@@ -1,0 +1,56 @@
+name: CI
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  build:
+    # The type of runner that the job will run on
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Install Elan (Ubuntu)
+      run: |
+        curl -sSL https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh > elan-init.sh
+        chmod +x elan-init.sh
+        ./elan-init.sh -y
+        echo "$HOME/.elan/bin" >> $GITHUB_PATH
+
+    # Necessary for utils/. Ordering is important as this clone wipes the folder clean.
+    - name: Clone gap-lean
+      uses: actions/checkout@v2
+      with:
+        fetch-depth: 1
+
+    # TODO: refactor into utils/build.sh && utils/test.sh
+    - name: Checkout
+      uses: actions/checkout@v2
+
+    - name: Goto directory
+      run: cd lean-gap
+    
+    - name: Check Lean
+      run: lean --version
+    - name: Configure leanpkg
+      run: |
+        ls 
+        pwd
+        cd lean-gap
+        ls 
+        pwd
+        leanpkg configure
+    - name: Build package
+      run: |
+        cd lean-gap
+        leanpkg build
+        leanpkg build bin
+    - name: Test examples
+      run: |
+        export PATH=`pwd`/build/bin:$PATH # add MLIR from lean-MLIR to path
+        export PATH=`pwd`/llvm-project/build/bin:$PATH  # add mlir-opt from llvm-project to path
+        echo $PATH
+        cd lean-gap
+        make test # run quickCheck based tests.
