@@ -29,22 +29,13 @@ jobs:
     - name: Checkout
       uses: actions/checkout@v2
 
-    - name: Goto directory
-      run: cd lean-gap
-    
     - name: Check Lean
       run: lean --version
     - name: Configure leanpkg
       run: |
-        ls 
-        pwd
-        cd lean-gap
-        ls 
-        pwd
         leanpkg configure
     - name: Build package
       run: |
-        cd lean-gap
         leanpkg build
         leanpkg build bin
     - name: Test examples
@@ -52,5 +43,4 @@ jobs:
         export PATH=`pwd`/build/bin:$PATH # add MLIR from lean-MLIR to path
         export PATH=`pwd`/llvm-project/build/bin:$PATH  # add mlir-opt from llvm-project to path
         echo $PATH
-        cd lean-gap
         make test # run quickCheck based tests.
